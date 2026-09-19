@@ -1,8 +1,17 @@
 # Changelog
 
-## 0.6.0-dev.1 — 2026-09-19
+## 0.6.0 — 2026-09-19
 
-Development build, не публичный stable release.
+Новый stable baseline после field validation на K1C ×3 и K1 Max ×1.
+
+### Validation
+
+- K1C ×3 — PASS.
+- K1 Max ×1 — PASS.
+- FULL healthcheck: 56 PASS / 0 WARN / 0 FAIL.
+- Fluidd macro grouping/visibility — PASS.
+- Fluidd/Moonraker webcam provisioning — PASS.
+- Relative camera URLs — PASS.
 
 ### Добавлено
 

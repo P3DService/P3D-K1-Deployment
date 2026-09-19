@@ -89,16 +89,32 @@ def backup_state(fluidd, webcams):
     return path
 
 def macro_state_matches(fluidd):
+    """Compare the Fluidd layout semantically, not by category UUID.
+
+    Fluidd generates random UUIDs when categories are created manually. A user
+    may therefore already have exactly the P3D layout with different IDs. That
+    must be treated as a match and must not be overwritten.
+    """
     macros = fluidd.get("macros") or {}
     cats = macros.get("categories") or []
     stored = macros.get("stored") or []
+
+    cat_by_id = {x.get("id"): x.get("name") for x in cats}
     names = [x.get("name") for x in cats]
     if names != [x["name"] for x in CATEGORIES]:
         return False
+
     by_name = {str(x.get("name", "")).upper(): x for x in stored}
     for macro, cat_name in VISIBLE.items():
         item = by_name.get(macro)
-        if not item or item.get("visible") is not True or item.get("categoryId") != CAT[cat_name]:
+        if not item or item.get("visible") is not True:
+            return False
+        if cat_by_id.get(item.get("categoryId")) != cat_name:
+            return False
+
+    # Every explicitly stored non-baseline macro should remain hidden.
+    for name, item in by_name.items():
+        if name not in VISIBLE and item.get("visible") is True:
             return False
     return True
 
@@ -108,7 +124,10 @@ def provision_macros(force=False):
     existing_categories = macros.get("categories") or []
     existing_stored = macros.get("stored") or []
 
-    if existing_categories and not macro_state_matches(fluidd) and not force:
+    if existing_categories and macro_state_matches(fluidd):
+        return ("already", "Fluidd macro groups already match P3D baseline; existing category IDs preserved.")
+
+    if existing_categories and not force:
         return ("preserved", "Existing custom Fluidd macro layout detected; preserved. Set P3D_K1_FLUIDD_FORCE=1 to replace it with P3D baseline.")
 
     names = get_macro_names()
@@ -209,7 +228,10 @@ def main():
 
         force = args.force_macros or os.environ.get("P3D_K1_FLUIDD_FORCE") == "1"
         state, msg = provision_macros(force=force)
-        print(("[PASS]" if state == "applied" else "[WARN]") + " " + msg)
+        if state in ("applied", "already"):
+            print("[PASS] " + msg)
+        else:
+            print("[WARN] " + msg)
 
         state, msg = provision_camera()
         print(("[PASS]" if state in ("created", "updated") else "[WARN]") + " " + msg)

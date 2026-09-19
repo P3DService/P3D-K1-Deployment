@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.0-dev.1 — 2026-09-19
+
+Development build, не публичный stable release.
+
+### Добавлено
+
+- Автоматический Fluidd provisioning.
+- Регистрация/нормализация Moonraker webcam.
+- Относительные camera URLs через `/webcam/`, без привязки к IP.
+- Сохранение существующего camera name/UID при reconcile.
+- Группы макросов PRINT / CALIBRATION / KAMP / TIMELAPSE.
+- Скрытие остальных macros только на уровне Fluidd dashboard, без удаления из Klipper.
+- Защита custom Fluidd layouts: без force существующая нестандартная раскладка сохраняется и даёт WARN.
+- Backup Fluidd state перед provisioning.
+- FULL healthcheck validation для Fluidd macro/webcam baseline.
+
 ## 0.5.1 — 2026-09-19
 
 Bootstrap/release packaging update. Runtime deployment baseline не изменён относительно 0.5.0.

@@ -1,4 +1,4 @@
-**English** | [Русский](../ru/RELEASE_v0.6.0.md)
+[English](https://github.com/P3DService/P3D-K1-Deployment/blob/v0.6.0/docs/en/RELEASE_v0.6.0.md) | [Русский](https://github.com/P3DService/P3D-K1-Deployment/blob/v0.6.0/docs/ru/RELEASE_v0.6.0.md)
 
 # Release v0.6.0
 

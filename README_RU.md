@@ -190,6 +190,7 @@ tail -100 /usr/data/scripts/p3d-k1/deploy.log
 - [Fluidd provisioning](docs/ru/FLUIDD_PROVISIONING.md)
 - [Архитектура](docs/ru/ARCHITECTURE.md)
 - [Troubleshooting](docs/ru/TROUBLESHOOTING.md)
+- [TMC2209: перегрев во время холодной калибровки](docs/ru/TMC2209_OVERHEAT.md)
 - [Валидация](docs/ru/VALIDATION.md)
 - [Release notes v0.6.0](docs/ru/RELEASE_v0.6.0.md)
 
@@ -201,6 +202,7 @@ tail -100 /usr/data/scripts/p3d-k1/deploy.log
 - [Fluidd provisioning](docs/en/FLUIDD_PROVISIONING.md)
 - [Architecture](docs/en/ARCHITECTURE.md)
 - [Troubleshooting](docs/en/TROUBLESHOOTING.md)
+- [TMC2209 overtemperature during cold calibration](docs/en/TMC2209_OVERHEAT.md)
 - [Validation](docs/en/VALIDATION.md)
 - [v0.6.0 release notes](docs/en/RELEASE_v0.6.0.md)
 

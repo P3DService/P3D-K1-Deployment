@@ -130,6 +130,14 @@ P3D_K1_FLUIDD_FORCE=1 /usr/data/scripts/p3d-k1/deploy.sh
 
 A backup is created before provisioning.
 
+## TMC2209 overtemperature during cold calibration
+
+If `stepper_x` / `stepper_y` reports overtemperature during Bed Mesh, Input Shaper or resonance calibration while the hotend is cold, see the field-validated K1 Max fix:
+
+- [TMC2209 overtemperature during cold calibration](TMC2209_OVERHEAT.md)
+
+The validated case was caused by the mainboard fan being grouped with the hotend fan and therefore switching off below the hotend temperature threshold.
+
 ## Collect diagnostics
 
 ```bash

@@ -1,5 +1,8 @@
 # P3D K1 Deployment
 
+> Ветка `main` сейчас содержит development-line `0.6.0-dev.1` с автоматическим Fluidd provisioning. Стабильный публичный release остаётся `v0.5.1` до завершения field validation.
+
+
 Автоматизированное развёртывание, настройка и проверка состояния rooted-принтеров **Creality K1C** и **Creality K1 Max**.
 
 Проект создан P3D Service как воспроизводимый способ привести принтер K1-series к заранее проверенному operational baseline после получения root-доступа — как на новом/сброшенном принтере, так и на уже настроенной машине.
@@ -24,6 +27,7 @@
 - включает QUICK healthcheck после загрузки и по расписанию;
 - перезапускает Moonraker и ждёт реальной готовности API;
 - завершает установку только после FULL healthcheck.
+- автоматически provision'ит Fluidd: webcam + macro groups/visibility;
 
 Проект поддерживает два сценария:
 
@@ -325,6 +329,7 @@ Healthcheck хранит локальный итоговый статус в:
 - [Установка](docs/INSTALLATION_RU.md)
 - [Компоненты](docs/COMPONENTS_RU.md)
 - [Healthcheck](docs/HEALTHCHECK_RU.md)
+- [Fluidd provisioning](docs/FLUIDD_PROVISIONING_RU.md)
 - [Архитектура](docs/ARCHITECTURE_RU.md)
 - [Troubleshooting](docs/TROUBLESHOOTING_RU.md)
 - [Валидация](docs/VALIDATION_RU.md)

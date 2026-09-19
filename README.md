@@ -112,7 +112,7 @@ ssh root@PRINTER_IP
 
 ```bash
 wget -q -O /tmp/p3d-k1-install.sh \
-  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/main/install.sh
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.5.1/install.sh
 
 cat /tmp/p3d-k1-install.sh
 sh /tmp/p3d-k1-install.sh
@@ -128,13 +128,13 @@ Bootstrap:
 
 ### Быстрый one-liner
 
-Если вы уже проверили репозиторий и доверяете текущей ветке `main`:
+Если вы уже проверили проект и доверяете release `v0.5.1`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/main/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.5.1/install.sh | sh
 ```
 
-> Для максимально воспроизводимого production-развёртывания рекомендуется использовать конкретный release/tag после его публикации, а не плавающую ветку `main`.
+`install.sh` по умолчанию также скачивает `deploy.sh`, `healthcheck.sh` и `VERSION` именно из immutable tag `v0.5.1`. При необходимости ref можно переопределить переменной `P3D_K1_REF`.
 
 ### Альтернатива: ручное копирование
 
@@ -282,7 +282,7 @@ Deployment оставляет **Moonraker Timelapse** и отключает шт
 
 ## Проверенный baseline
 
-Версия проекта: **v0.5**
+Версия проекта: **v0.5.1**
 
 Протестированный Helper Script commit:
 

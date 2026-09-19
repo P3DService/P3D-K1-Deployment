@@ -71,13 +71,18 @@ def post_db(key, value):
     })
 
 def get_macro_names():
-    data = req("/printer/objects/query?configfile")
-    settings = data["result"]["status"]["configfile"]["settings"]
+    """Return the actual live Klipper gcode_macro object list.
+
+    Fluidd builds its dashboard from live printer objects, not merely from
+    configfile.settings. Querying configfile therefore missed dynamically
+    loaded/registered macros and left them visible in the uncategorized group.
+    """
+    data = req("/printer/objects/list")
+    objects = data["result"]["objects"]
     names = []
-    for key in settings:
-        if key.lower().startswith("gcode_macro "):
-            name = key.split(None, 1)[1]
-            names.append(name)
+    for obj in objects:
+        if obj.lower().startswith("gcode_macro "):
+            names.append(obj.split(None, 1)[1])
     return sorted(set(names), key=str.lower)
 
 def backup_state(fluidd, webcams):

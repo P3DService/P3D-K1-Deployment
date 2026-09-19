@@ -1,81 +1,64 @@
 # P3D K1 Deployment
 
-Автоматизированное развёртывание, настройка и проверка состояния rooted-принтеров **Creality K1C** и **Creality K1 Max**.
+[**English**](README.md) | [Русский](README_RU.md)
 
-Проект создан P3D Service как воспроизводимый способ привести принтер K1-series к заранее проверенному operational baseline после получения root-доступа — как на новом/сброшенном принтере, так и на уже настроенной машине.
+Automated deployment, configuration, Fluidd provisioning and health validation for rooted **Creality K1C** and **Creality K1 Max** printers.
 
-> Проект не является официальным продуктом Creality или Guilouz. Он использует [Creality Helper Script](https://github.com/Guilouz/Creality-Helper-Script) как внешний upstream и не копирует его код.
+P3D K1 Deployment turns a rooted K1-series printer into a repeatable, validated baseline with the approved Helper Script stack, working camera, Moonraker Timelapse, cleanup automation, organized Fluidd macros and QUICK/FULL health checks.
 
-## Что делает проект
+> This is an independent community project by P3D Service. It is not an official Creality or Guilouz product. It uses [Creality Helper Script](https://github.com/Guilouz/Creality-Helper-Script) as an external upstream and does not vendor its installer logic.
 
-`deploy.sh` автоматически:
+## Current stable baseline
 
-- проверяет, что устройство относится к K1-series;
-- проверяет свободное место и базовые зависимости;
-- устанавливает или сверяет Creality Helper Script;
-- проверяет совместимость внутреннего API Helper Script;
-- устанавливает утверждённый набор компонентов;
-- не допускает установку `Fans Control Macros` в baseline P3D;
-- проверяет/восстанавливает MJPEG-поток камеры;
-- отключает штатный Creality Timelapse;
-- включает Moonraker Timelapse;
-- проверяет `ffmpeg` и создаёт compatibility path `/opt/bin/ffmpeg` при необходимости;
-- ставит автоматическую очистку timelapse-файлов при заполнении диска;
-- включает QUICK healthcheck после загрузки и по расписанию;
-- перезапускает Moonraker и ждёт реальной готовности API;
-- завершает установку только после FULL healthcheck.
-- автоматически provision'ит Fluidd: webcam + macro groups/visibility;
+**v0.6.0**
 
-Проект поддерживает два сценария:
+Validated on:
 
-### FRESH
+- Creality K1C ×3
+- Creality K1 Max ×1
 
-Новый принтер или принтер после factory reset:
+Final FULL validation:
 
 ```
-Factory reset / new printer
-→ root access
-→ P3D deploy
-→ Helper Script
-→ approved components
-→ P3D compatibility fixes
-→ FULL healthcheck
-→ PASS / WARN / FAIL
+PASS: 56
+WARN: 0
+FAIL: 0
+STATUS: PASS
 ```
 
-### RECONCILE
-
-Уже настроенный K1C / K1 Max:
+Tested Creality Helper Script commit:
 
 ```
-existing printer
-→ P3D deploy
-→ installed components are detected
-→ missing baseline parts are added
-→ configuration is reconciled
-→ FULL healthcheck
+b46787a61b3ce2f04ec04d115a73a46c26814057
 ```
 
-Повторный запуск `deploy.sh` предусмотрен и должен быть идемпотентным для уже приведённого к baseline принтера.
+## What it does
 
-## Поддерживаемые модели
+`deploy.sh`:
 
-На текущем подтверждённом baseline:
+- validates K1-series model and free space;
+- installs or verifies Creality Helper Script;
+- fail-closes on an unvalidated Helper Script revision;
+- installs the approved module set;
+- blocks the `Fans Control Macros` baseline;
+- verifies/restores MJPEG camera runtime;
+- disables stock Creality Timelapse;
+- enables Moonraker Timelapse;
+- validates/repairs ffmpeg path compatibility;
+- installs timelapse disk cleanup and cron;
+- installs automatic QUICK healthcheck at boot and daily;
+- waits for real Moonraker API readiness;
+- provisions Fluidd webcam settings;
+- provisions Fluidd macro groups and visibility;
+- runs FULL validation before declaring the printer ready.
 
-- Creality K1C
-- Creality K1 Max
-
-Скрипт намеренно проверяет модель перед изменениями.
-
-## Устанавливаемые компоненты Helper Script
-
-P3D baseline включает:
+## Approved Helper Script modules
 
 1. Moonraker + Nginx
 2. Fluidd
 3. Entware
 4. Klipper Gcode Shell Command
-5. Klipper Adaptive Meshing & Purging (KAMP)
+5. KAMP
 6. Nozzle Cleaning Fan Control
 7. Improved Shapers Calibrations
 8. Useful Macros
@@ -83,33 +66,45 @@ P3D baseline включает:
 10. M600 Support
 11. Moonraker Timelapse
 
-Для KAMP PrusaSlicer-specific macros автоматически оставляются выключенными.
+PrusaSlicer-specific KAMP helper macros remain disabled by default.
 
-### Что намеренно не входит в baseline
+## Fluidd baseline
 
-В частности, проект **не устанавливает Fans Control Macros**.
+### Macro groups
 
-На тестовом парке P3D именно этот компонент ранее совпал с появлением ошибки вентилятора во время печати, поэтому в текущем baseline он является safety deny-list элементом. Это не утверждение о том, что компонент неисправен на всех K1-series; это консервативное решение данного deployment-профиля.
+```
+PRINT         4
+CALIBRATION   6
+KAMP          2
+TIMELAPSE     2
+```
 
-Другие необязательные компоненты Helper Script также не устанавливаются автоматически.
+All other live Klipper macros stay installed but are hidden from the Fluidd dashboard.
 
-Подробности: [docs/COMPONENTS_RU.md](docs/COMPONENTS_RU.md).
+### Webcam
 
-## Быстрый старт
+Baseline:
 
-### 1. Получить root-доступ
+```
+service: mjpegstreamer-adaptive
+stream_url: /webcam/?action=stream
+snapshot_url: /webcam/?action=snapshot
+target_fps: 15
+target_fps_idle: 5
+aspect_ratio: 4:3
+```
 
-Root-доступ должен быть уже включён штатным/поддерживаемым для вашей прошивки способом.
+Existing database-managed camera name and UID are preserved during reconcile. Relative URLs avoid binding the setup to a printer IP.
 
-### 2. Рекомендуемый bootstrap
+## Quick start
 
-Подключитесь к принтеру по SSH:
+After enabling root access:
 
 ```bash
 ssh root@PRINTER_IP
 ```
 
-Скачайте bootstrap, при желании просмотрите его и запустите:
+Recommended pinned bootstrap:
 
 ```bash
 wget -q -O /tmp/p3d-k1-install.sh \
@@ -119,250 +114,131 @@ cat /tmp/p3d-k1-install.sh
 sh /tmp/p3d-k1-install.sh
 ```
 
-Bootstrap:
-
-- проверяет, что запущен от root;
-- проверяет, что принтер относится к K1-series;
-- скачивает `deploy.sh`, `healthcheck.sh` и `VERSION`;
-- устанавливает их в `/usr/data/scripts/p3d-k1/`;
-- запускает deployment.
-
-### Быстрый one-liner
-
-Если вы уже проверили проект и доверяете release `v0.6.0`:
+One-liner:
 
 ```bash
 wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh | sh
 ```
 
-`install.sh` по умолчанию также скачивает `deploy.sh`, `healthcheck.sh` и `VERSION` именно из immutable tag `v0.6.0`. При необходимости ref можно переопределить переменной `P3D_K1_REF`.
+> Some stock BusyBox builds print `TLS certificate validation not implemented`. See [Troubleshooting](docs/en/TROUBLESHOOTING.md) for the security trade-off and recommended workflow.
 
-> На некоторых stock-прошивках BusyBox `wget` выводит `TLS certificate validation not implemented`. Это ожидаемое ограничение встроенного клиента; подробности и рекомендации — в [Troubleshooting](docs/TROUBLESHOOTING_RU.md).
+## FRESH and RECONCILE
 
-### Альтернатива: ручное копирование
+### FRESH
 
-На macOS современные версии `scp` по умолчанию используют SFTP. На factory-reset K1/K1 Max может отсутствовать `/usr/libexec/sftp-server`, поэтому используйте legacy SCP mode:
-
-```bash
-ssh root@PRINTER_IP 'mkdir -p /usr/data/scripts/p3d-k1'
-
-scp -O deploy.sh healthcheck.sh \
-  root@PRINTER_IP:/usr/data/scripts/p3d-k1/
-```
-
-Затем:
-
-```bash
-ssh root@PRINTER_IP
-chmod +x /usr/data/scripts/p3d-k1/*.sh
-/usr/data/scripts/p3d-k1/deploy.sh
-```
-
-Успешный финал выглядит так:
+For a new or factory-reset printer:
 
 ```
-PASS: 54
-WARN: 0
-FAIL: 0
-STATUS: PASS
-
-P3D K1 DEPLOYMENT: PASS
+factory reset / new printer
+→ root
+→ bootstrap
+→ Helper Script stack
+→ P3D compatibility fixes
+→ Fluidd provisioning
+→ FULL healthcheck
+→ READY
 ```
 
-Полная пошаговая инструкция: [docs/INSTALLATION_RU.md](docs/INSTALLATION_RU.md).
+### RECONCILE
+
+For an existing configured printer:
+
+```
+existing printer
+→ deploy
+→ detect existing approved modules
+→ add missing baseline pieces
+→ preserve matching user state
+→ FULL healthcheck
+```
 
 ## Healthcheck
 
-В проекте **один** `healthcheck.sh` и два режима.
-
-### QUICK
+QUICK:
 
 ```bash
 /usr/data/scripts/p3d-k1/healthcheck.sh --quick
 ```
 
-Проверяет operational health: Klipper, Moonraker, Fluidd/Nginx, camera snapshot, timelapse, ffmpeg, cron, место на диске и safety-инварианты.
-
-QUICK автоматически запускается:
-- после загрузки принтера;
-- раз в сутки через cron.
-
-### FULL
+FULL:
 
 ```bash
 /usr/data/scripts/p3d-k1/healthcheck.sh --full
 ```
 
-Включает QUICK-проверки и дополнительно проверяет:
-- revision Helper Script;
-- совместимость ожидаемого Helper API;
-- наличие всех baseline-компонентов;
-- Git-state Moonraker;
-- KAMP integration;
-- Moonraker printer API;
-- boot services и P3D hooks.
-
-FULL автоматически выполняется в конце `deploy.sh` и рекомендуется после обновлений/существенных изменений.
-
-## Где смотреть результаты healthcheck
-
-### Если healthcheck запущен вручную
-
-Результат виден прямо в SSH-консоли:
-
-```bash
-/usr/data/scripts/p3d-k1/healthcheck.sh --quick
-/usr/data/scripts/p3d-k1/healthcheck.sh --full
-```
-
-### Последний краткий статус
+Current status:
 
 ```bash
 cat /usr/data/scripts/p3d-k1/status
 ```
 
-Возможные значения:
-
-```
-PASS
-WARN
-FAIL
-```
-
-### История healthcheck
-
-```bash
-cat /usr/data/scripts/p3d-k1/healthcheck.log
-```
-
-или последние строки:
+Health history:
 
 ```bash
 tail -100 /usr/data/scripts/p3d-k1/healthcheck.log
 ```
 
-### Лог deployment
+Deployment log:
 
 ```bash
-cat /usr/data/scripts/p3d-k1/deploy.log
+tail -100 /usr/data/scripts/p3d-k1/deploy.log
 ```
 
-Подробности: [docs/HEALTHCHECK_RU.md](docs/HEALTHCHECK_RU.md).
+## Documentation
 
-## Timelapse
+### English
 
-Deployment оставляет **Moonraker Timelapse** и отключает штатный Creality Timelapse, чтобы избежать параллельного хранения двух наборов timelapse-файлов.
+- [Installation](docs/en/INSTALLATION.md)
+- [Components](docs/en/COMPONENTS.md)
+- [Healthcheck](docs/en/HEALTHCHECK.md)
+- [Fluidd provisioning](docs/en/FLUIDD_PROVISIONING.md)
+- [Architecture](docs/en/ARCHITECTURE.md)
+- [Troubleshooting](docs/en/TROUBLESHOOTING.md)
+- [Validation](docs/en/VALIDATION.md)
+- [v0.6.0 release notes](docs/en/RELEASE_v0.6.0.md)
 
-Проверяется:
-- наличие Moonraker Timelapse component;
-- `[timelapse]` в `moonraker.conf`;
-- include `timelapse.cfg`;
-- snapshot камеры;
-- рабочий `ffmpeg`;
-- путь `/opt/bin/ffmpeg`.
+### Русский
 
-Если на конкретной прошивке `ffmpeg` расположен в `/usr/bin/ffmpeg`, deployment создаёт compatibility symlink.
+- [Установка](docs/ru/INSTALLATION.md)
+- [Компоненты](docs/ru/COMPONENTS.md)
+- [Healthcheck](docs/ru/HEALTHCHECK.md)
+- [Fluidd provisioning](docs/ru/FLUIDD_PROVISIONING.md)
+- [Архитектура](docs/ru/ARCHITECTURE.md)
+- [Troubleshooting](docs/ru/TROUBLESHOOTING.md)
+- [Валидация](docs/ru/VALIDATION.md)
+- [Release notes v0.6.0](docs/ru/RELEASE_v0.6.0.md)
 
-## Автоочистка диска
+## Community
 
-Политика:
+Use GitHub Issues for:
 
-- запуск cleanup при заполнении `/usr/data` до 80%;
-- удаление самых старых timelapse-файлов;
-- остановка очистки после снижения заполнения до 75%;
-- проверка раз в час.
+- bug reports;
+- compatibility reports;
+- feature requests.
 
-## Безопасность изменений
+See [CONTRIBUTING.md](CONTRIBUTING.md) or [CONTRIBUTING_RU.md](CONTRIBUTING_RU.md).
 
-Проект намеренно работает fail-closed:
+## External monitoring
 
-- если модель не K1-series — deployment прекращается;
-- если upstream Helper Script отличается от протестированного commit — deployment прекращается;
-- если ожидаемые функции Helper Script исчезли — deployment прекращается;
-- если найден `Fans Control Macros` — deployment прекращается;
-- успешность Moonraker определяется по реальной готовности API, а не только по exit code init-script;
-- production-ready состояние подтверждается FULL healthcheck.
-
-## Проверенный baseline
-
-Версия проекта: **v0.6.0**
-
-Протестированный Helper Script commit:
-
-```
-b46787a61b3ce2f04ec04d115a73a46c26814057
-```
-
-Field validation:
-
-| Сценарий | Модель | Результат |
-|---|---|---|
-| RECONCILE | K1C ×3 | PASS |
-| FRESH | K1 Max ×1 | PASS |
-| Повторный deploy / идемпотентность | K1 Max ×1 | PASS |
-
-Подробности: [docs/VALIDATION_RU.md](docs/VALIDATION_RU.md).
-
-## Интеграция с внешним мониторингом
-
-Healthcheck хранит локальный итоговый статус в:
+The project exposes local state through:
 
 ```
 /usr/data/scripts/p3d-k1/status
-```
-
-и детальный лог в:
-
-```
 /usr/data/scripts/p3d-k1/healthcheck.log
 ```
 
-Эти данные могут использоваться внешними системами мониторинга, Home Assistant, собственными дашбордами и системами управления парком оборудования.
+These files can be consumed by Home Assistant, dashboards or fleet-management systems without coupling this public repository to any private infrastructure.
 
-Проект не зависит от какой-либо конкретной внешней платформы мониторинга.
+## License
 
-## Документация
-
-- [Установка](docs/INSTALLATION_RU.md)
-- [Компоненты](docs/COMPONENTS_RU.md)
-- [Healthcheck](docs/HEALTHCHECK_RU.md)
-- [Fluidd provisioning](docs/FLUIDD_PROVISIONING_RU.md)
-- [Архитектура](docs/ARCHITECTURE_RU.md)
-- [Troubleshooting](docs/TROUBLESHOOTING_RU.md)
-- [Валидация](docs/VALIDATION_RU.md)
-
-## Участие в проекте
-
-Bug reports, compatibility reports и улучшения приветствуются.
-
-Перед отправкой изменений прочитайте [CONTRIBUTING.md](CONTRIBUTING.md).
-
-Для issues доступны отдельные шаблоны:
-
-- bug report;
-- compatibility report;
-- feature request.
-
-Особенно полезны подтверждения работы на других firmware/hardware revisions K1-series с результатом FULL healthcheck.
-
-## Ограничения
-
-- Требуется root-доступ.
-- Проект изменяет системные файлы принтера.
-- Перед использованием рекомендуется иметь резервную копию критичных конфигов.
-- Baseline привязан к протестированному commit Creality Helper Script.
-- Новая версия прошивки Creality или Helper Script может потребовать повторной валидации.
-
-## Лицензия
-
-MIT. См. [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
 ## Credits
 
 - [Creality](https://www.creality.com/)
 - [Guilouz / Creality Helper Script](https://github.com/Guilouz/Creality-Helper-Script)
-- Moonraker
 - Klipper
+- Moonraker
 - Fluidd
 - KAMP
 

@@ -135,3 +135,35 @@ cat /usr/data/scripts/p3d-k1/status
 tail -100 /usr/data/scripts/p3d-k1/healthcheck.log
 tail -100 /usr/data/scripts/p3d-k1/deploy.log
 ```
+
+
+## wget: TLS certificate validation not implemented
+
+На некоторых stock-прошивках K1-series BusyBox `wget` выводит:
+
+```
+wget: note: TLS certificate validation not implemented
+```
+
+Это ограничение встроенного BusyBox `wget`: он может устанавливать HTTPS-соединение, но не выполняет полноценную проверку TLS-сертификата.
+
+Во время field validation загрузка с `raw.githubusercontent.com` при этом отрабатывала успешно и bootstrap завершался с PASS.
+
+Важно понимать trade-off:
+
+- сообщение не означает, что загрузка уже сломалась;
+- но transport trust слабее, чем у полноценного `curl`/OpenSSL-клиента с проверкой CA;
+- для воспроизводимости bootstrap закреплён на конкретный release/tag;
+- перед первым запуском рекомендуется скачать `install.sh`, просмотреть его и только затем выполнять.
+
+Рекомендуемый вариант:
+
+```bash
+wget -q -O /tmp/p3d-k1-install.sh \
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.5.1/install.sh
+
+cat /tmp/p3d-k1-install.sh
+sh /tmp/p3d-k1-install.sh
+```
+
+Если в вашей среде доступен клиент с полноценной TLS-валидацией, предпочтительно использовать его для загрузки bootstrap.

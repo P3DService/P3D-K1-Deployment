@@ -8,6 +8,9 @@ P3D K1 Deployment превращает rooted K1-series в воспроизво�
 
 > Это независимый community-проект P3D Service. Он не является официальным продуктом Creality или Guilouz. [Creality Helper Script](https://github.com/Guilouz/Creality-Helper-Script) используется как внешний upstream, его installer logic в репозиторий не копируется.
 
+> [!WARNING]
+> **Все действия вы выполняете на свой страх и риск.** Root, изменение прошивки/конфигурации, принудительные движения, разборка и механические/электрические регулировки могут повредить оборудование, привести к потере гарантии или травме. В максимальной степени, допускаемой законом, P3D Service и участники проекта не несут ответственности за последствия. Полный текст: [Отказ от ответственности](DISCLAIMER.md).
+
 ## Текущий stable baseline
 
 **v0.6.0**
@@ -191,6 +194,7 @@ tail -100 /usr/data/scripts/p3d-k1/deploy.log
 - [Архитектура](docs/ru/ARCHITECTURE.md)
 - [Troubleshooting](docs/ru/TROUBLESHOOTING.md)
 - [TMC2209: перегрев во время холодной калибровки](docs/ru/TMC2209_OVERHEAT.md)
+- [K1 Max: уклон Bed Mesh и синхронизация Z](docs/ru/BED_MESH_Z_SYNC.md)
 - [Валидация](docs/ru/VALIDATION.md)
 - [Release notes v0.6.0](docs/ru/RELEASE_v0.6.0.md)
 
@@ -203,6 +207,7 @@ tail -100 /usr/data/scripts/p3d-k1/deploy.log
 - [Architecture](docs/en/ARCHITECTURE.md)
 - [Troubleshooting](docs/en/TROUBLESHOOTING.md)
 - [TMC2209 overtemperature during cold calibration](docs/en/TMC2209_OVERHEAT.md)
+- [K1 Max Bed Mesh tilt and Z synchronization](docs/en/BED_MESH_Z_SYNC.md)
 - [Validation](docs/en/VALIDATION.md)
 - [v0.6.0 release notes](docs/en/RELEASE_v0.6.0.md)
 

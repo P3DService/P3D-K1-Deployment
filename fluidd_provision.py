@@ -88,20 +88,29 @@ def backup_state(fluidd, webcams):
         json.dump({"fluidd": fluidd, "webcams": webcams}, f, ensure_ascii=False, indent=2)
     return path
 
-def macro_state_matches(fluidd):
-    """Compare the Fluidd layout semantically, not by category UUID.
+def category_layout_matches(fluidd):
+    """Check category names/order without depending on Fluidd-generated UUIDs."""
+    macros = fluidd.get("macros") or {}
+    cats = macros.get("categories") or []
+    return [x.get("name") for x in cats] == [x["name"] for x in CATEGORIES]
 
-    Fluidd generates random UUIDs when categories are created manually. A user
-    may therefore already have exactly the P3D layout with different IDs. That
-    must be treated as a match and must not be overwritten.
+def category_ids_by_name(fluidd):
+    macros = fluidd.get("macros") or {}
+    return {x.get("name"): x.get("id") for x in (macros.get("categories") or [])}
+
+def macro_state_matches(fluidd, available_names=None):
+    """Compare categories plus visibility/category assignment semantically.
+
+    Unstored Fluidd macros default to visible=true, therefore a complete P3D
+    baseline requires every available non-baseline macro to have an explicit
+    stored visible=false entry.
     """
     macros = fluidd.get("macros") or {}
     cats = macros.get("categories") or []
     stored = macros.get("stored") or []
 
     cat_by_id = {x.get("id"): x.get("name") for x in cats}
-    names = [x.get("name") for x in cats]
-    if names != [x["name"] for x in CATEGORIES]:
+    if not category_layout_matches(fluidd):
         return False
 
     by_name = {str(x.get("name", "")).upper(): x for x in stored}
@@ -112,27 +121,40 @@ def macro_state_matches(fluidd):
         if cat_by_id.get(item.get("categoryId")) != cat_name:
             return False
 
-    # Every explicitly stored non-baseline macro should remain hidden.
-    for name, item in by_name.items():
-        if name not in VISIBLE and item.get("visible") is True:
-            return False
+    if available_names is not None:
+        for name in available_names:
+            upper = name.upper()
+            if upper in VISIBLE:
+                continue
+            item = by_name.get(upper)
+            if not item or item.get("visible") is not False:
+                return False
+
     return True
 
 def provision_macros(force=False):
     fluidd = get_fluidd()
     macros = fluidd.get("macros") or {}
     existing_categories = macros.get("categories") or []
-    existing_stored = macros.get("stored") or []
+    names = get_macro_names()
 
-    if existing_categories and macro_state_matches(fluidd):
-        return ("already", "Fluidd macro groups already match P3D baseline; existing category IDs preserved.")
+    if existing_categories and macro_state_matches(fluidd, names):
+        return ("already", "Fluidd macro groups/visibility already match P3D baseline; existing category IDs preserved.")
 
-    if existing_categories and not force:
+    if existing_categories and not category_layout_matches(fluidd) and not force:
         return ("preserved", "Existing custom Fluidd macro layout detected; preserved. Set P3D_K1_FLUIDD_FORCE=1 to replace it with P3D baseline.")
 
-    names = get_macro_names()
+    # If the category names/order already match the P3D baseline, preserve the
+    # user's existing Fluidd-generated UUIDs and only reconcile macro visibility.
+    if existing_categories and category_layout_matches(fluidd):
+        ids = category_ids_by_name(fluidd)
+        categories_to_write = existing_categories
+    else:
+        ids = CAT
+        categories_to_write = CATEGORIES
+
     stored = []
-    for i, name in enumerate(names):
+    for name in names:
         upper = name.upper()
         category = VISIBLE.get(upper)
         if category:
@@ -141,7 +163,7 @@ def provision_macros(force=False):
                 "visible": True,
                 "disabledWhilePrinting": False,
                 "color": "",
-                "categoryId": CAT[category],
+                "categoryId": ids[category],
                 "name": name,
             })
         else:
@@ -154,10 +176,10 @@ def provision_macros(force=False):
                 "name": name,
             })
 
-    post_db("macros.categories", CATEGORIES)
+    post_db("macros.categories", categories_to_write)
     post_db("macros.stored", stored)
     post_db("macros.expanded", [0, 1])
-    return ("applied", "Fluidd macro groups/visibility provisioned (%d macros)" % len(stored))
+    return ("applied", "Fluidd macro groups/visibility provisioned (%d macros); non-baseline macros hidden." % len(stored))
 
 def get_webcams():
     return req("/server/webcams/list")["result"]["webcams"]
@@ -196,11 +218,14 @@ def check_camera():
 
 def check_macros():
     fluidd = get_fluidd()
-    if macro_state_matches(fluidd):
-        return True, "Fluidd macro groups baseline OK"
+    names = get_macro_names()
+    if macro_state_matches(fluidd, names):
+        return True, "Fluidd macro groups/visibility baseline OK"
     macros = fluidd.get("macros") or {}
-    if macros.get("categories"):
+    if macros.get("categories") and not category_layout_matches(fluidd):
         return None, "Custom Fluidd macro layout present (not P3D baseline)"
+    if category_layout_matches(fluidd):
+        return False, "P3D macro categories exist but non-baseline visibility is not fully reconciled"
     return False, "Fluidd macro groups baseline missing"
 
 def main():

@@ -136,6 +136,8 @@ wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.5.1/
 
 `install.sh` по умолчанию также скачивает `deploy.sh`, `healthcheck.sh` и `VERSION` именно из immutable tag `v0.5.1`. При необходимости ref можно переопределить переменной `P3D_K1_REF`.
 
+> На некоторых stock-прошивках BusyBox `wget` выводит `TLS certificate validation not implemented`. Это ожидаемое ограничение встроенного клиента; подробности и рекомендации — в [Troubleshooting](docs/TROUBLESHOOTING_RU.md).
+
 ### Альтернатива: ручное копирование
 
 На macOS современные версии `scp` по умолчанию используют SFTP. На factory-reset K1/K1 Max может отсутствовать `/usr/libexec/sftp-server`, поэтому используйте legacy SCP mode:
@@ -326,6 +328,20 @@ Healthcheck хранит локальный итоговый статус в:
 - [Архитектура](docs/ARCHITECTURE_RU.md)
 - [Troubleshooting](docs/TROUBLESHOOTING_RU.md)
 - [Валидация](docs/VALIDATION_RU.md)
+
+## Участие в проекте
+
+Bug reports, compatibility reports и улучшения приветствуются.
+
+Перед отправкой изменений прочитайте [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Для issues доступны отдельные шаблоны:
+
+- bug report;
+- compatibility report;
+- feature request.
+
+Особенно полезны подтверждения работы на других firmware/hardware revisions K1-series с результатом FULL healthcheck.
 
 ## Ограничения
 

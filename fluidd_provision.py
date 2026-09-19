@@ -227,21 +227,28 @@ def main():
         print("[PASS] Fluidd state backup: %s" % backup)
 
         force = args.force_macros or os.environ.get("P3D_K1_FLUIDD_FORCE") == "1"
+        had_warn = False
+
         state, msg = provision_macros(force=force)
         if state in ("applied", "already"):
             print("[PASS] " + msg)
         else:
+            had_warn = True
             print("[WARN] " + msg)
 
         state, msg = provision_camera()
-        print(("[PASS]" if state in ("created", "updated") else "[WARN]") + " " + msg)
+        if state in ("created", "updated"):
+            print("[PASS] " + msg)
+        else:
+            had_warn = True
+            print("[WARN] " + msg)
 
         ok, msg = check_camera()
         if not ok:
             print("[FAIL] " + msg)
             return 2
         print("[PASS] " + msg)
-        return 0
+        return 1 if had_warn else 0
     except Exception as exc:
         print("[FAIL] Fluidd provisioning error: %s" % exc)
         return 2

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.1 — 2026-09-19
+
+Bootstrap/release packaging update. Runtime deployment baseline не изменён относительно 0.5.0.
+
+### Изменено
+
+- Добавлен публичный `install.sh` для bootstrap одной командой.
+- Bootstrap по умолчанию закреплён на immutable release/tag `v0.5.1`.
+- README обновлён на release-pinned installation workflow.
+- Версия проекта синхронизирована с публичным release.
+
+### Runtime baseline
+
+- Creality Helper Script commit: `b46787a61b3ce2f04ec04d115a73a46c26814057`.
+- RECONCILE: K1C ×3 — PASS.
+- FRESH: K1 Max ×1 — PASS.
+- Idempotency: K1 Max ×1 — PASS.
+- FULL: 54 PASS / 0 WARN / 0 FAIL.
+
 ## 0.5.0 — 2026-09-19
 
 Первый публичный validated baseline.

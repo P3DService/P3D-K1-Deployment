@@ -162,7 +162,7 @@ wget: note: TLS certificate validation not implemented
 
 ```bash
 wget -q -O /tmp/p3d-k1-install.sh \
-  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.5.1/install.sh
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh
 
 cat /tmp/p3d-k1-install.sh
 sh /tmp/p3d-k1-install.sh

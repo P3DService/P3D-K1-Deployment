@@ -107,7 +107,7 @@ Immutable bootstrap из public release `v0.5.1` был запущен на ра
 
 ```bash
 wget -qO- \
-  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.5.1/install.sh | sh
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh | sh
 ```
 
 Результат:

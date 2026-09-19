@@ -2,7 +2,7 @@
 set -eu
 
 REPO="P3DService/P3D-K1-Deployment"
-REF="${P3D_K1_REF:-main}"
+REF="${P3D_K1_REF:-v0.5.1}"
 RAW_BASE="https://raw.githubusercontent.com/${REPO}/${REF}"
 DEST="/usr/data/scripts/p3d-k1"
 TMP="/tmp/p3d-k1-bootstrap.$$"

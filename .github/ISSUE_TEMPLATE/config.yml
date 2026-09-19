@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Creality Helper Script upstream
+    url: https://github.com/Guilouz/Creality-Helper-Script
+    about: Вопросы и баги самого Helper Script лучше проверять в upstream-проекте.

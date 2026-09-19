@@ -1,5 +1,5 @@
-name: Feature request
-description: Предложение по deployment, healthcheck или документации
+name: Feature request / Идея
+description: Suggest an improvement to deployment, healthcheck or docs / Предложить улучшение deployment, healthcheck или документации
 title: "[FEATURE] "
 labels:
   - enhancement
@@ -7,36 +7,36 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: Какую проблему решаем
+      label: Problem to solve / Какую проблему решаем
     validations:
       required: true
 
   - type: textarea
     id: proposal
     attributes:
-      label: Предлагаемое решение
+      label: Proposed solution / Предлагаемое решение
     validations:
       required: true
 
   - type: textarea
     id: tradeoffs
     attributes:
-      label: Риски / trade-offs
-      description: Что может сломаться или усложниться.
+      label: Risks and trade-offs / Риски и trade-offs
 
   - type: dropdown
     id: scope
     attributes:
-      label: Область
+      label: Area / Область
       options:
         - deploy.sh
         - healthcheck.sh
         - install.sh
+        - Fluidd provisioning
         - camera
         - timelapse
         - Helper Script integration
         - documentation
         - external monitoring contract
-        - другое
+        - other / другое
     validations:
       required: true

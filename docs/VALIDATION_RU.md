@@ -97,3 +97,36 @@ Validated означает, что указанные сценарии реал�
 - при наличии сторонних модификаций.
 
 Именно поэтому deployment содержит fail-closed gates и FULL validation.
+
+
+## Public release bootstrap validation
+
+Immutable bootstrap из public release `v0.5.1` был запущен на ранее настроенном Creality K1C через:
+
+```bash
+wget -qO- \
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.5.1/install.sh | sh
+```
+
+Результат:
+
+```
+P3D K1 Deployment 0.5.1 installed
+Moonraker API ready after 6s
+
+PASS: 54
+WARN: 0
+FAIL: 0
+STATUS: PASS
+
+P3D K1 DEPLOYMENT: PASS
+```
+
+Подтверждено:
+
+- release tag доступен через `raw.githubusercontent.com`;
+- `install.sh` скачивает deployment files из того же `v0.5.1`;
+- RECONCILE через публичный bootstrap идемпотентен на протестированном K1C;
+- FULL gate проходит после bootstrap.
+
+На stock BusyBox `wget` при тесте выводилось предупреждение `TLS certificate validation not implemented`. Оно задокументировано отдельно в troubleshooting.

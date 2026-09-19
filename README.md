@@ -1,8 +1,5 @@
 # P3D K1 Deployment
 
-> Ветка `main` сейчас содержит development-line `0.6.0-dev.1` с автоматическим Fluidd provisioning. Стабильный публичный release остаётся `v0.5.1` до завершения field validation.
-
-
 Автоматизированное развёртывание, настройка и проверка состояния rooted-принтеров **Creality K1C** и **Creality K1 Max**.
 
 Проект создан P3D Service как воспроизводимый способ привести принтер K1-series к заранее проверенному operational baseline после получения root-доступа — как на новом/сброшенном принтере, так и на уже настроенной машине.
@@ -116,7 +113,7 @@ ssh root@PRINTER_IP
 
 ```bash
 wget -q -O /tmp/p3d-k1-install.sh \
-  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.5.1/install.sh
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh
 
 cat /tmp/p3d-k1-install.sh
 sh /tmp/p3d-k1-install.sh
@@ -132,13 +129,13 @@ Bootstrap:
 
 ### Быстрый one-liner
 
-Если вы уже проверили проект и доверяете release `v0.5.1`:
+Если вы уже проверили проект и доверяете release `v0.6.0`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.5.1/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh | sh
 ```
 
-`install.sh` по умолчанию также скачивает `deploy.sh`, `healthcheck.sh` и `VERSION` именно из immutable tag `v0.5.1`. При необходимости ref можно переопределить переменной `P3D_K1_REF`.
+`install.sh` по умолчанию также скачивает `deploy.sh`, `healthcheck.sh` и `VERSION` именно из immutable tag `v0.6.0`. При необходимости ref можно переопределить переменной `P3D_K1_REF`.
 
 > На некоторых stock-прошивках BusyBox `wget` выводит `TLS certificate validation not implemented`. Это ожидаемое ограничение встроенного клиента; подробности и рекомендации — в [Troubleshooting](docs/TROUBLESHOOTING_RU.md).
 
@@ -288,7 +285,7 @@ Deployment оставляет **Moonraker Timelapse** и отключает шт
 
 ## Проверенный baseline
 
-Версия проекта: **v0.5.1**
+Версия проекта: **v0.6.0**
 
 Протестированный Helper Script commit:
 

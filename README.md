@@ -8,6 +8,9 @@ P3D K1 Deployment turns a rooted K1-series printer into a repeatable, validated 
 
 > This is an independent community project by P3D Service. It is not an official Creality or Guilouz product. It uses [Creality Helper Script](https://github.com/Guilouz/Creality-Helper-Script) as an external upstream and does not vendor its installer logic.
 
+> [!WARNING]
+> **Use at your own risk.** Rooting, firmware/configuration changes, forced motion, disassembly and mechanical/electrical adjustments can damage equipment, void warranty or cause injury. P3D Service and contributors are not responsible for consequences to the maximum extent permitted by applicable law. Read the full [Safety Disclaimer](DISCLAIMER.md).
+
 ## Current stable baseline
 
 **v0.6.0**
@@ -195,6 +198,7 @@ tail -100 /usr/data/scripts/p3d-k1/deploy.log
 - [Architecture](docs/en/ARCHITECTURE.md)
 - [Troubleshooting](docs/en/TROUBLESHOOTING.md)
 - [TMC2209 overtemperature during cold calibration](docs/en/TMC2209_OVERHEAT.md)
+- [K1 Max Bed Mesh tilt and Z synchronization](docs/en/BED_MESH_Z_SYNC.md)
 - [Validation](docs/en/VALIDATION.md)
 - [v0.6.0 release notes](docs/en/RELEASE_v0.6.0.md)
 
@@ -207,6 +211,7 @@ tail -100 /usr/data/scripts/p3d-k1/deploy.log
 - [Архитектура](docs/ru/ARCHITECTURE.md)
 - [Troubleshooting](docs/ru/TROUBLESHOOTING.md)
 - [TMC2209: перегрев во время холодной калибровки](docs/ru/TMC2209_OVERHEAT.md)
+- [K1 Max: уклон Bed Mesh и синхронизация Z](docs/ru/BED_MESH_Z_SYNC.md)
 - [Валидация](docs/ru/VALIDATION.md)
 - [Release notes v0.6.0](docs/ru/RELEASE_v0.6.0.md)
 

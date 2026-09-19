@@ -138,6 +138,14 @@ If `stepper_x` / `stepper_y` reports overtemperature during Bed Mesh, Input Shap
 
 The validated case was caused by the mainboard fan being grouped with the hotend fan and therefore switching off below the hotend temperature threshold.
 
+## Bed Mesh takes many minutes / very large front-to-back tilt
+
+If a 6×6 Bed Mesh appears to finish its normal 36 points and then continues for several more minutes, inspect `klippy.log` for `RE_PROBE_POINT`. A large smooth slope can trigger repeated PRTouch validation passes rather than a UI hang.
+
+See the field-validated K1 Max guide:
+
+- [K1 Max Bed Mesh tilt, repeated probing and Z synchronization](BED_MESH_Z_SYNC.md)
+
 ## Collect diagnostics
 
 ```bash

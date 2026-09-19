@@ -1,5 +1,5 @@
-name: Bug report
-description: Ошибка deployment, healthcheck или совместимости K1-series
+name: Bug report / Ошибка
+description: Report a deployment, healthcheck or compatibility problem / Сообщить об ошибке deployment, healthcheck или совместимости
 title: "[BUG] "
 labels:
   - bug
@@ -7,64 +7,65 @@ body:
   - type: markdown
     attributes:
       value: |
-        Спасибо за отчёт. Не публикуйте пароли, SSH keys, токены и приватные данные.
+        Thanks for the report / Спасибо за отчёт.
+        Do not publish passwords, SSH keys, tokens or private infrastructure data.
+        Не публикуйте пароли, SSH keys, токены и приватные данные инфраструктуры.
 
   - type: dropdown
     id: model
     attributes:
-      label: Модель
+      label: Printer model / Модель принтера
       options:
         - Creality K1C
         - Creality K1 Max
-        - Другая K1-series
+        - Other K1-series / Другая K1-series
     validations:
       required: true
 
   - type: input
     id: firmware
     attributes:
-      label: Firmware
-      description: Версия прошивки Creality
-      placeholder: "например 1.x.x.x"
+      label: Firmware version / Версия прошивки
+      placeholder: "e.g. / например 1.x.x.x"
     validations:
       required: true
 
   - type: input
     id: version
     attributes:
-      label: P3D K1 Deployment version
-      placeholder: "например v0.5.1"
+      label: P3D K1 Deployment version / Версия P3D K1 Deployment
+      placeholder: "v0.6.0"
     validations:
       required: true
 
   - type: dropdown
     id: scenario
     attributes:
-      label: Сценарий
+      label: Scenario / Сценарий
       options:
-        - FRESH после factory reset
-        - RECONCILE существующей установки
-        - Повторный deploy / idempotency
+        - FRESH after factory reset / FRESH после factory reset
+        - RECONCILE existing setup / RECONCILE существующей установки
+        - Repeat deploy / Idempotency
         - QUICK healthcheck
         - FULL healthcheck
         - Bootstrap install.sh
-        - Другое
+        - Other / Другое
     validations:
       required: true
 
   - type: textarea
     id: problem
     attributes:
-      label: Что произошло
-      description: Кратко опишите ожидаемое и фактическое поведение.
+      label: What happened / Что произошло
+      description: Expected vs actual behavior / Ожидаемое и фактическое поведение
     validations:
       required: true
 
   - type: textarea
     id: output
     attributes:
-      label: Вывод консоли / healthcheck
-      description: Удалите приватные данные перед публикацией.
+      label: Console or healthcheck output / Вывод консоли или healthcheck
+      description: Remove private data first / Удалите приватные данные
       render: shell
     validations:
       required: true
@@ -72,15 +73,15 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: Дополнительные логи
-      description: При необходимости приложите tail deploy.log / healthcheck.log.
+      label: Additional logs / Дополнительные логи
+      description: deploy.log, healthcheck.log, Moonraker log excerpts if relevant
 
   - type: checkboxes
     id: checks
     attributes:
-      label: Проверки
+      label: Checklist / Проверки
       options:
-        - label: Я удалил пароли, токены, SSH keys и приватные данные.
+        - label: I removed secrets and private data / Я удалил secrets и приватные данные
           required: true
-        - label: Я проверил существующие issues.
+        - label: I checked existing issues / Я проверил существующие issues
           required: true

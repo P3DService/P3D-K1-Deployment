@@ -68,6 +68,18 @@ else
   fail "Camera snapshot request failed"
 fi
 
+rm -f /tmp/p3d_fluidd_snapshot.jpg
+if wget -q -T 5 -O /tmp/p3d_fluidd_snapshot.jpg 'http://127.0.0.1:4408/webcam/?action=snapshot' 2>/dev/null; then
+  FLUIDD_SNAP_SIZE="$(stat -c %s /tmp/p3d_fluidd_snapshot.jpg 2>/dev/null || echo 0)"
+  if [ "$FLUIDD_SNAP_SIZE" -gt 1000 ]; then
+    pass "Fluidd /webcam/ proxy snapshot OK ($FLUIDD_SNAP_SIZE bytes)"
+  else
+    fail "Fluidd /webcam/ proxy snapshot too small ($FLUIDD_SNAP_SIZE bytes)"
+  fi
+else
+  fail "Fluidd /webcam/ proxy snapshot failed"
+fi
+
 if [ -x /opt/bin/ffmpeg ]; then
   if /opt/bin/ffmpeg -version >/dev/null 2>&1; then pass "Timelapse ffmpeg executable OK"; else fail "/opt/bin/ffmpeg exists but cannot execute"; fi
 else

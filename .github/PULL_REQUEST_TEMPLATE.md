@@ -1,31 +1,32 @@
-## Что изменено
+## Summary / Что изменено
 
-<!-- Кратко -->
+<!-- Brief description / Краткое описание -->
 
-## Зачем
+## Why / Зачем
 
-<!-- Проблема / причина -->
+<!-- Problem and rationale / Проблема и причина -->
 
-## Scope
+## Scope / Область
 
 - [ ] deploy.sh
 - [ ] healthcheck.sh
 - [ ] install.sh
+- [ ] Fluidd provisioning
 - [ ] docs
 - [ ] compatibility
-- [ ] другое
+- [ ] other / другое
 
-## Проверено на
+## Tested on / Проверено на
 
-Модель:
+Printer model / Модель:
 
-Firmware:
+Firmware / Прошивка:
 
 P3D K1 Deployment version:
 
 Creality Helper Script commit:
 
-Сценарий:
+Scenario / Сценарий:
 
 - [ ] FRESH
 - [ ] RECONCILE
@@ -42,14 +43,14 @@ FAIL:
 STATUS:
 ```
 
-## Риски / rollback
+## Risks and rollback / Риски и rollback
 
-<!-- Что может пойти не так и как откатить -->
+<!-- What can fail and how to revert / Что может сломаться и как откатить -->
 
 ## Checklist
 
-- [ ] Код совместим с BusyBox / `/bin/sh`.
-- [ ] Нет GNU-only зависимостей без проверки.
-- [ ] Не добавлены secrets/private data.
-- [ ] CHANGELOG обновлён, если поведение пользователя изменилось.
-- [ ] Повторный deploy не ломает уже приведённый к baseline принтер.
+- [ ] BusyBox / `/bin/sh` compatible.
+- [ ] No unchecked GNU-only dependencies.
+- [ ] No secrets or private infrastructure data.
+- [ ] CHANGELOG updated if user-visible behavior changed.
+- [ ] Repeat deployment does not break a baseline printer.

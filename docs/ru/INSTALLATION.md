@@ -153,4 +153,4 @@ cat /usr/data/scripts/p3d-k1/deploy.log
 /usr/data/scripts/p3d-k1/healthcheck.sh --full
 ```
 
-Дальше используйте [TROUBLESHOOTING_RU.md](TROUBLESHOOTING_RU.md).
+Дальше используйте [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

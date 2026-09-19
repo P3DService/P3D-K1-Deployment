@@ -1,104 +1,86 @@
+**English** | [Русский](CONTRIBUTING_RU.md)
+
 # Contributing
 
-Спасибо за интерес к P3D K1 Deployment.
+Thanks for your interest in P3D K1 Deployment.
 
-Проект предназначен для воспроизводимого развёртывания и проверки rooted-принтеров Creality K1-series. Изменения в deployment-логике потенциально затрагивают рабочие принтеры, поэтому основной принцип проекта — **сначала воспроизводимость и безопасность, потом удобство**.
+This project changes real printer runtime state, so the primary rule is: **reproducibility and safety first, convenience second**.
 
-## Что можно присылать
-
-Приветствуются:
+## Contributions welcome
 
 - bug reports;
-- подтверждение работы на других K1-series firmware/hardware revisions;
-- исправления BusyBox-совместимости;
-- улучшения healthcheck;
-- документация;
-- дополнительные диагностические проверки;
-- улучшения bootstrap/install flow;
-- аккуратные compatibility fixes.
+- compatibility reports for other firmware/hardware revisions;
+- BusyBox compatibility fixes;
+- healthcheck improvements;
+- documentation;
+- additional diagnostic checks;
+- bootstrap/install improvements;
+- carefully scoped compatibility fixes.
 
-## Что не стоит добавлять без отдельного обсуждения
+## Discuss first
 
-- автоматическое включение всех модулей Creality Helper Script;
-- изменения fan-control baseline;
-- удаление fail-closed gates;
-- автоматические destructive fixes без backup;
-- привязку публичного проекта к конкретной приватной fleet-management системе;
-- поддержку других семейств принтеров без отдельного профиля/валидации.
+Please open an issue before proposing:
 
-## Перед Pull Request
+- automatic installation of every Helper Script module;
+- changes to the fan-control baseline;
+- removal of fail-closed gates;
+- destructive automatic fixes without backup;
+- coupling this public project to a specific private fleet-management system;
+- support for other printer families without a separate profile and validation.
 
-1. Откройте issue и опишите проблему/цель, если изменение влияет на runtime.
-2. Укажите модель принтера и версию firmware.
-3. Укажите, был ли сценарий:
-   - FRESH;
-   - RECONCILE;
-   - update;
-   - healthcheck-only.
-4. Выполните:
+## Before a Pull Request
+
+1. Open an issue if runtime behavior changes.
+2. Include printer model and firmware.
+3. State the scenario: FRESH / RECONCILE / update / healthcheck-only.
+4. Run:
    ```bash
    /usr/data/scripts/p3d-k1/healthcheck.sh --full
    ```
-5. Приложите итог:
+5. Include:
    ```
    PASS: N
    WARN: N
    FAIL: N
    STATUS: ...
    ```
-6. Если изменение касается deployment — повторите запуск `deploy.sh` и подтвердите идемпотентность.
+6. If deployment logic changes, repeat `deploy.sh` and confirm idempotency.
 
-## Требования к shell-скриптам
+## Shell requirements
 
-Target environment — stock Creality userspace с BusyBox.
+Target environment is stock Creality userspace with BusyBox.
 
-Поэтому:
-
-- `#!/bin/sh`, не Bash;
-- избегайте GNU-only опций;
-- не используйте Bash arrays;
-- не рассчитывайте на `systemd`;
-- не рассчитывайте на полноценный GNU `grep`, `sed`, `find`;
-- внешняя утилита должна проверяться через `command -v`;
-- destructive operation должна иметь backup/guard;
-- runtime readiness лучше проверять фактом работы API/сервиса, а не только exit code init-script.
+- use `#!/bin/sh`, not Bash;
+- no Bash arrays;
+- do not assume systemd;
+- avoid GNU-only options;
+- check external tools with `command -v`;
+- destructive operations need backup/guards;
+- validate readiness through real API/service state when possible.
 
 ## Helper Script
 
-Creality Helper Script рассматривается как внешний upstream.
+Creality Helper Script is an external upstream.
 
-Проект:
+This project does not vendor its installer logic. It pins a tested commit and uses internal installer functions only after a compatibility gate.
 
-- не форкает его код;
-- не копирует installer logic;
-- фиксирует протестированный commit;
-- использует internal functions только после compatibility gate.
+## Pull Requests
 
-Если upstream commit изменился, обновление baseline должно сопровождаться повторной field validation.
+A PR should include:
 
-## Pull Request
+- what changed;
+- why;
+- affected models;
+- firmware;
+- test scenario;
+- FULL healthcheck result;
+- risks/rollback;
+- CHANGELOG update when user-visible behavior changes.
 
-PR должен содержать:
+## Security
 
-- краткое описание;
-- причину изменения;
-- затронутые модели;
-- сценарий тестирования;
-- результат FULL healthcheck;
-- риски/rollback;
-- изменение CHANGELOG, если поведение пользователя изменилось.
+Do not publish passwords, private SSH keys, tokens, private URLs, or data from private systems.
 
-## Безопасность
+## License
 
-Не публикуйте:
-
-- пароли;
-- приватные SSH keys;
-- IP/hostname, если не хотите раскрывать инфраструктуру;
-- токены;
-- приватные URL;
-- данные сторонних приватных систем.
-
-## Лицензия
-
-Отправляя вклад, вы соглашаетесь, что ваш вклад распространяется по лицензии MIT данного проекта.
+By contributing, you agree that your contribution is licensed under the project's MIT license.

@@ -272,6 +272,28 @@ else
   fail "Moonraker API did not become ready within ${MOONRAKER_TIMEOUT}s"
 fi
 
+step "Fluidd provisioning"
+PROVISION="$P3D_DIR/fluidd_provision.py"
+[ -f "$PROVISION" ] || fail "$PROVISION is missing. Install the complete P3D deployment package."
+
+PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON="$(command -v python3 2>/dev/null || true)"
+fi
+[ -n "$PYTHON" ] && [ -x "$PYTHON" ] || fail "Python 3 runtime not found for Fluidd provisioning"
+
+set +e
+PROVISION_OUTPUT="$("$PYTHON" "$PROVISION" 2>&1)"
+PROVISION_RC=$?
+set -e
+[ -n "$PROVISION_OUTPUT" ] && say "$PROVISION_OUTPUT"
+
+case "$PROVISION_RC" in
+  0) pass "Fluidd provisioning completed" ;;
+  1) say "[WARN] Fluidd provisioning preserved custom user state; FULL healthcheck will report WARN" ;;
+  *) fail "Fluidd provisioning failed (rc=$PROVISION_RC)" ;;
+esac
+
 [ -x "$P3D_DIR/healthcheck.sh" ] || fail "$P3D_DIR/healthcheck.sh is missing. Copy the complete P3D deployment package before running deploy.sh."
 
 step "FULL post-deploy gate"

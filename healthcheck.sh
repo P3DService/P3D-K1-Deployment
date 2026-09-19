@@ -181,6 +181,25 @@ if [ "$MODE" = "--full" ]; then
   fi
 
   grep -q 'include Helper-Script/KAMP/KAMP_Settings.cfg' "$PRINTER_CFG" 2>/dev/null && pass "KAMP include enabled in printer.cfg" || fail "KAMP include missing"
+
+  PROVISION="$P3D_DIR/fluidd_provision.py"
+  PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+  if [ ! -x "$PYTHON" ]; then
+    PYTHON="$(command -v python3 2>/dev/null || true)"
+  fi
+  if [ -f "$PROVISION" ] && [ -n "$PYTHON" ] && [ -x "$PYTHON" ]; then
+    set +e
+    PROVISION_CHECK="$("$PYTHON" "$PROVISION" --check 2>&1)"
+    PROVISION_RC=$?
+    set -e
+    case "$PROVISION_RC" in
+      0) pass "Fluidd provisioning baseline OK" ;;
+      1) warn "Fluidd provisioning differs from P3D baseline: $PROVISION_CHECK" ;;
+      *) fail "Fluidd provisioning validation failed: $PROVISION_CHECK" ;;
+    esac
+  else
+    fail "Fluidd provisioning helper/runtime missing"
+  fi
 fi
 
 out ""

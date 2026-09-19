@@ -2,7 +2,7 @@
 
 ## Версия
 
-P3D K1 Deployment v0.5 / 0.5.0.
+P3D K1 Deployment v0.6.0.
 
 ## Upstream baseline
 
@@ -130,3 +130,35 @@ P3D K1 DEPLOYMENT: PASS
 - FULL gate проходит после bootstrap.
 
 На stock BusyBox `wget` при тесте выводилось предупреждение `TLS certificate validation not implemented`. Оно задокументировано отдельно в troubleshooting.
+
+## Fluidd Provisioning v0.6.0
+
+Development-line 0.6.0-dev.1 была проверена на:
+
+```
+K1C-1   PASS
+K1C-2   PASS
+K1C-3   PASS
+K1Max-1 PASS
+```
+
+На всех четырёх принтерах:
+
+- камера доступна через Fluidd;
+- relative `/webcam/` proxy работает;
+- существующее camera name/UID сохраняется при reconcile;
+- на K1 Max webcam была создана автоматически;
+- macro groups сформированы;
+- non-baseline macros скрыты в Fluidd dashboard без удаления из Klipper;
+- FULL healthcheck: `56 PASS / 0 WARN / 0 FAIL`.
+
+Визуально подтверждено отображение групп:
+
+```
+PRINT         4
+CALIBRATION   6
+KAMP          2
+TIMELAPSE     2
+```
+
+Блок uncategorized/system macros после reconciliation не отображается.

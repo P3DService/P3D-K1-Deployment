@@ -100,7 +100,43 @@ P3D baseline включает:
 
 Root-доступ должен быть уже включён штатным/поддерживаемым для вашей прошивки способом.
 
-### 2. Скопировать скрипты на принтер
+### 2. Рекомендуемый bootstrap
+
+Подключитесь к принтеру по SSH:
+
+```bash
+ssh root@PRINTER_IP
+```
+
+Скачайте bootstrap, при желании просмотрите его и запустите:
+
+```bash
+wget -q -O /tmp/p3d-k1-install.sh \
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/main/install.sh
+
+cat /tmp/p3d-k1-install.sh
+sh /tmp/p3d-k1-install.sh
+```
+
+Bootstrap:
+
+- проверяет, что запущен от root;
+- проверяет, что принтер относится к K1-series;
+- скачивает `deploy.sh`, `healthcheck.sh` и `VERSION`;
+- устанавливает их в `/usr/data/scripts/p3d-k1/`;
+- запускает deployment.
+
+### Быстрый one-liner
+
+Если вы уже проверили репозиторий и доверяете текущей ветке `main`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/main/install.sh | sh
+```
+
+> Для максимально воспроизводимого production-развёртывания рекомендуется использовать конкретный release/tag после его публикации, а не плавающую ветку `main`.
+
+### Альтернатива: ручное копирование
 
 На macOS современные версии `scp` по умолчанию используют SFTP. На factory-reset K1/K1 Max может отсутствовать `/usr/libexec/sftp-server`, поэтому используйте legacy SCP mode:
 
@@ -111,7 +147,7 @@ scp -O deploy.sh healthcheck.sh \
   root@PRINTER_IP:/usr/data/scripts/p3d-k1/
 ```
 
-### 3. Запустить deployment
+Затем:
 
 ```bash
 ssh root@PRINTER_IP

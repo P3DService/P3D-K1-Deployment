@@ -13,7 +13,7 @@ P3D K1 Deployment turns a rooted K1-series printer into a repeatable, validated 
 
 ## Current stable baseline
 
-**v0.6.0**
+**v0.6.1**
 
 Validated on:
 
@@ -44,6 +44,7 @@ b46787a61b3ce2f04ec04d115a73a46c26814057
 - fail-closes on an unvalidated Helper Script revision;
 - installs the approved module set;
 - blocks the `Fans Control Macros` baseline;
+- applies the K1 Max CF0502 motherboard-fan compatibility baseline;
 - verifies/restores MJPEG camera runtime;
 - disables stock Creality Timelapse;
 - enables Moonraker Timelapse;
@@ -99,6 +100,14 @@ aspect_ratio: 4:3
 
 Existing database-managed camera name and UID are preserved during reconcile. Relative URLs avoid binding the setup to a printer IP.
 
+## Known issues / troubleshooting
+
+If a **K1 Max** reports `CF0502`, `Mainboard fan exception` or `Motherboard fan running abnormal`, use the dedicated field-validated guide:
+
+- [K1 Max CF0502 / motherboard fan exception](docs/en/K1_MAX_CF0502.md)
+
+The v0.6.1 baseline keeps the motherboard fan above 0 RPM and validates the fix through healthcheck.
+
 ## Quick start
 
 After enabling root access:
@@ -111,7 +120,7 @@ Recommended pinned bootstrap:
 
 ```bash
 wget -q -O /tmp/p3d-k1-install.sh \
-  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.1/install.sh
 
 cat /tmp/p3d-k1-install.sh
 sh /tmp/p3d-k1-install.sh
@@ -120,7 +129,7 @@ sh /tmp/p3d-k1-install.sh
 One-liner:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.1/install.sh | sh
 ```
 
 > Some stock BusyBox builds print `TLS certificate validation not implemented`. See [Troubleshooting](docs/en/TROUBLESHOOTING.md) for the security trade-off and recommended workflow.
@@ -197,9 +206,11 @@ tail -100 /usr/data/scripts/p3d-k1/deploy.log
 - [Fluidd provisioning](docs/en/FLUIDD_PROVISIONING.md)
 - [Architecture](docs/en/ARCHITECTURE.md)
 - [Troubleshooting](docs/en/TROUBLESHOOTING.md)
+- [K1 Max CF0502 / motherboard fan exception](docs/en/K1_MAX_CF0502.md)
 - [TMC2209 overtemperature during cold calibration](docs/en/TMC2209_OVERHEAT.md)
 - [K1 Max Bed Mesh tilt and Z synchronization](docs/en/BED_MESH_Z_SYNC.md)
 - [Validation](docs/en/VALIDATION.md)
+- [v0.6.1 release notes](docs/en/RELEASE_v0.6.1.md)
 - [v0.6.0 release notes](docs/en/RELEASE_v0.6.0.md)
 
 ### Русский

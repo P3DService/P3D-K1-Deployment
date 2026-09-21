@@ -699,7 +699,7 @@ exit "$RC"
   else
     fail "K1 Max motherboard fan CF0502 baseline missing or incomplete"
   fi
-  grep -q '^\[controller_fan board_fan\]if [ -f "$LOGFILE" ]; then
+  if grep -q '^\[controller_fan board_fan\]if [ -f "$LOGFILE" ]; then
   CRIT="$(tail -400 "$LOGFILE" | grep -iE 'fatal|timelapse: .*not found|failed to load component|unable to load component|server initialization failed|unhandled exception' | tail -10 || true)"
   [ -z "$CRIT" ] && pass "No obvious critical Moonraker errors in recent log" || { warn "Potential recent Moonraker errors:"; out "$CRIT"; }
 else
@@ -814,9 +814,11 @@ echo "$STATUS" > "$STATUS_FILE"
 cat "$RUNLOG" >> "$LOG"
 rm -f "$RUNLOG"
 exit "$RC"
- "$PRINTER_CFG" 2>/dev/null \
-    && fail "Legacy K1 Max controller_fan board_fan detected" \
-    || pass "Legacy K1 Max controller_fan board_fan absent"
+ "$PRINTER_CFG" 2>/dev/null; then
+    fail "Legacy K1 Max controller_fan board_fan detected"
+  else
+    pass "Legacy K1 Max controller_fan board_fan absent"
+  fi
   if sed -n '/^\[multi_pin heater_fans\]$/,/^\[/p' "$PRINTER_CFG" 2>/dev/null | grep -q 'PB2'; then
     fail "K1 Max PB2 still tied to heater_fans"
   else

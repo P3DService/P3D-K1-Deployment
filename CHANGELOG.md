@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Исправлено
+
+- K1 Max: устранён ложный `CF0502` / `motherboard fan running abnormal`, возникавший после остановки отдельного `[controller_fan board_fan]`.
+- `PB2` переведён на отдельный PWM board-fan baseline: 50% в idle, 100% при `mcu_temp >= 48 C`, возврат к 50% при `mcu_temp <= 42 C`.
+- Добавлена fail-closed миграция stock/legacy K1 Max fan mapping и backup исходного `printer.cfg`.
+- Healthcheck проверяет наличие K1 Max CF0502 baseline, отсутствие legacy `controller_fan board_fan` и отсутствие `PB2` в `heater_fans`.
+
+### Field validation
+
+- K1 Max: idle tach ~3200 RPM.
+- K1 Max: printing tach ~4000 RPM.
+- Печать завершена успешно; после 15+ минут idle CF0502 не повторилась.
+
 ## 0.6.0 — 2026-09-19
 
 Новый stable baseline после field validation на K1C ×3 и K1 Max ×1.

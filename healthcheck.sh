@@ -114,6 +114,28 @@ if [ -z "$USED" ]; then warn "Cannot read /usr/data usage"; elif [ "$USED" -lt 7
 FAN_FILE="/usr/data/printer_data/config/Helper-Script/fans-control.cfg"
 [ ! -f "$FAN_FILE" ] && pass "Fans Control Macros absent" || fail "Fans Control Macros detected"
 
+if echo "$MODEL_RAW" | grep -qi 'K1[[:space:]_-]*Max'; then
+  if grep -q '^\[output_pin board_fan\]$' "$PRINTER_CFG" 2>/dev/null \
+     && grep -q '^\[delayed_gcode P3D_BOARD_FAN_CONTROL\]$' "$PRINTER_CFG" 2>/dev/null \
+     && grep -q '^pin:[[:space:]]*PB2$' "$PRINTER_CFG" 2>/dev/null \
+     && grep -q '^value:[[:space:]]*0\.50$' "$PRINTER_CFG" 2>/dev/null \
+     && grep -q '^shutdown_value:[[:space:]]*1\.0$' "$PRINTER_CFG" 2>/dev/null; then
+    pass "K1 Max motherboard fan CF0502 baseline present"
+  else
+    fail "K1 Max motherboard fan CF0502 baseline missing or incomplete"
+  fi
+  if grep -q '^\[controller_fan board_fan\]$' "$PRINTER_CFG" 2>/dev/null; then
+    fail "Legacy K1 Max controller_fan board_fan detected"
+  else
+    pass "Legacy K1 Max controller_fan board_fan absent"
+  fi
+  if sed -n '/^\[multi_pin heater_fans\]$/,/^\[/p' "$PRINTER_CFG" 2>/dev/null | grep -q 'PB2'; then
+    fail "K1 Max PB2 still tied to heater_fans"
+  else
+    pass "K1 Max PB2 removed from heater_fans"
+  fi
+fi
+
 LOGFILE="/usr/data/printer_data/logs/moonraker.log"
 if [ -f "$LOGFILE" ]; then
   CRIT="$(tail -400 "$LOGFILE" | grep -iE 'fatal|timelapse: .*not found|failed to load component|unable to load component|server initialization failed|unhandled exception' | tail -10 || true)"

@@ -107,6 +107,112 @@ if [ -f "$FAN_CONTROLS_FILE" ]; then
 fi
 pass "Fans Control Macros absent"
 
+step "K1 Max motherboard fan compatibility"
+if echo "$MODEL_RAW" | grep -qi 'K1[[:space:]_-]*Max'; then
+  PRINTER_CFG="/usr/data/printer_data/config/printer.cfg"
+  [ -f "$PRINTER_CFG" ] || fail "$PRINTER_CFG missing"
+
+  BOARD_FAN_PY="/usr/data/moonraker/moonraker-env/bin/python"
+  if [ ! -x "$BOARD_FAN_PY" ]; then
+    BOARD_FAN_PY="$(command -v python3 2>/dev/null || true)"
+  fi
+  [ -n "$BOARD_FAN_PY" ] && [ -x "$BOARD_FAN_PY" ] || fail "Python 3 runtime not found for K1 Max board-fan compatibility patch"
+
+  "$BOARD_FAN_PY" - "$PRINTER_CFG" <<'PYEOF'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+original = path.read_text()
+text = original
+
+fixed = """# P3D: mainboard fan must never stop; Creality raises CF0502 after sustained 0 RPM.
+# 50% idle cooling, 100% above 48C MCU temperature, with 42C/48C hysteresis.
+[output_pin board_fan]
+pin: PB2
+pwm: True
+cycle_time: 0.010
+value: 0.50
+shutdown_value: 1.0
+
+[delayed_gcode P3D_BOARD_FAN_CONTROL]
+initial_duration: 2
+gcode:
+    {% set temp = printer["temperature_sensor mcu_temp"].temperature|float %}
+    {% set speed = printer["output_pin board_fan"].value|float %}
+    {% if temp >= 48.0 %}
+        SET_PIN PIN=board_fan VALUE=1.0
+    {% elif temp <= 42.0 %}
+        SET_PIN PIN=board_fan VALUE=0.50
+    {% elif speed < 0.50 %}
+        SET_PIN PIN=board_fan VALUE=0.50
+    {% endif %}
+    UPDATE_DELAYED_GCODE ID=P3D_BOARD_FAN_CONTROL DURATION=5
+"""
+
+if "[output_pin board_fan]" in text and "[delayed_gcode P3D_BOARD_FAN_CONTROL]" in text:
+    pattern = (
+        r'(?ms)^# P3D: mainboard fan must never stop;.*?'
+        r'^\[output_pin board_fan\]\n.*?'
+        r'^\[delayed_gcode P3D_BOARD_FAN_CONTROL\]\n.*?(?=^\[|\Z)'
+    )
+    text, count = re.subn(pattern, fixed + "\n", text, count=1)
+    if count != 1:
+        raise SystemExit("cannot reconcile existing P3D board-fan block")
+elif "[controller_fan board_fan]" in text:
+    pattern = (
+        r'(?ms)^(?:# P3D: cool the mainboard during cold calibration and motor holding\.\n)?'
+        r'\[controller_fan board_fan\]\n.*?(?=^\[|\Z)'
+    )
+    text, count = re.subn(pattern, fixed + "\n", text, count=1)
+    if count != 1:
+        raise SystemExit("cannot replace existing [controller_fan board_fan]")
+else:
+    m = re.search(r'(?ms)^\[multi_pin heater_fans\]\n(.*?)(?=^\[|\Z)', text)
+    if not m:
+        raise SystemExit("K1 Max [multi_pin heater_fans] section not found")
+    section = m.group(0)
+    pin_line = re.search(r'(?m)^pins\s*:\s*(.+)$', section)
+    if not pin_line:
+        raise SystemExit("K1 Max heater_fans pins line not found")
+    pins = [p.strip() for p in pin_line.group(1).split(",")]
+    if "PB2" not in pins:
+        raise SystemExit("PB2 is not present in stock heater_fans mapping; refusing unknown layout")
+    pins = [p for p in pins if p != "PB2"]
+    if not pins:
+        raise SystemExit("heater_fans would become empty")
+    new_section = section[:pin_line.start(1)] + ",".join(pins) + section[pin_line.end(1):]
+    text = text[:m.start()] + new_section + text[m.end():]
+    if not text.endswith("\n"):
+        text += "\n"
+    text += "\n" + fixed
+
+backup = path.with_name("printer.cfg.p3d-pre-cf0502-fix")
+if not backup.exists():
+    backup.write_text(original)
+path.write_text(text)
+PYEOF
+
+  grep -q '^\[output_pin board_fan\]$' "$PRINTER_CFG" || fail "K1 Max board_fan output_pin not installed"
+  grep -q '^\[delayed_gcode P3D_BOARD_FAN_CONTROL\]$' "$PRINTER_CFG" || fail "K1 Max board-fan controller not installed"
+  grep -q '^value:[[:space:]]*0\.50$' "$PRINTER_CFG" || fail "K1 Max board-fan idle floor is not 50%"
+  grep -q '^shutdown_value:[[:space:]]*1\.0$' "$PRINTER_CFG" || fail "K1 Max board-fan shutdown value is not 100%"
+  if grep -q '^\[controller_fan board_fan\]$' "$PRINTER_CFG"; then
+    fail "Legacy controller_fan board_fan still present"
+  fi
+  pass "K1 Max board fan CF0502 compatibility patch installed"
+
+  if restart_klipper >>"$LOG" 2>&1; then
+    pass "Klipper restarted to apply K1 Max board-fan baseline"
+  else
+    fail "Klipper restart failed after K1 Max board-fan patch"
+  fi
+  sleep 5
+else
+  pass "K1 Max board fan patch not applicable to this model"
+fi
+
 step "P3D camera compatibility"
 CAMERA_OK=0
 rm -f /tmp/p3d_snapshot.jpg

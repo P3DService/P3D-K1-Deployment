@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 — 2026-09-22
 
 ### Исправлено
 
@@ -8,6 +8,8 @@
 - `PB2` переведён на отдельный PWM board-fan baseline: 50% в idle, 100% при `mcu_temp >= 48 C`, возврат к 50% при `mcu_temp <= 42 C`.
 - Добавлена fail-closed миграция stock/legacy K1 Max fan mapping и backup исходного `printer.cfg`.
 - Healthcheck проверяет наличие K1 Max CF0502 baseline, отсутствие legacy `controller_fan board_fan` и отсутствие `PB2` в `heater_fans`.
+- Добавлен пользовательский RU/EN troubleshooting path по поисковым фразам `CF0502`, `Mainboard fan exception` и `Motherboard fan running abnormal`.
+- Pinned bootstrap и README переведены на v0.6.1.
 
 ### Field validation
 

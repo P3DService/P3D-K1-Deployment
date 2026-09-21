@@ -114,6 +114,716 @@ if [ -z "$USED" ]; then warn "Cannot read /usr/data usage"; elif [ "$USED" -lt 7
 FAN_FILE="/usr/data/printer_data/config/Helper-Script/fans-control.cfg"
 [ ! -f "$FAN_FILE" ] && pass "Fans Control Macros absent" || fail "Fans Control Macros detected"
 
+if echo "$MODEL_RAW" | grep -qi 'K1[[:space:]_-]*Max'; then
+  if grep -q '^\[output_pin board_fan\]if [ -f "$LOGFILE" ]; then
+  CRIT="$(tail -400 "$LOGFILE" | grep -iE 'fatal|timelapse: .*not found|failed to load component|unable to load component|server initialization failed|unhandled exception' | tail -10 || true)"
+  [ -z "$CRIT" ] && pass "No obvious critical Moonraker errors in recent log" || { warn "Potential recent Moonraker errors:"; out "$CRIT"; }
+else
+  warn "Moonraker log not found"
+fi
+
+if [ "$MODE" = "--full" ]; then
+  out ""
+  out "--- FULL validation ---"
+
+  if [ -d "$HELPER_DIR/.git" ]; then
+    HC="$(cd "$HELPER_DIR" && git rev-parse HEAD 2>/dev/null || true)"
+    [ -n "$HC" ] && pass "Helper Script git revision: $HC" || fail "Cannot read Helper Script revision"
+    if [ "$HC" = "$HELPER_TESTED_COMMIT" ]; then pass "Helper Script matches tested deployment baseline"; else warn "Helper Script differs from tested deployment baseline $HELPER_TESTED_COMMIT"; fi
+  else
+    fail "Helper Script git repository missing"
+  fi
+
+  MENU="$HELPER_DIR/scripts/menu/K1/install_menu_K1.sh"
+
+  check_helper_api() {
+    token="$1"
+    file="$2"
+    if [ -f "$file" ] && grep -q "function $token" "$file" 2>/dev/null; then
+      pass "Helper API present: $token"
+    else
+      fail "Helper API missing: $token ($file)"
+    fi
+  }
+
+  check_helper_api install_moonraker_nginx "$HELPER_DIR/scripts/moonraker_nginx.sh"
+  check_helper_api install_fluidd "$HELPER_DIR/scripts/fluidd.sh"
+  check_helper_api install_entware "$HELPER_DIR/scripts/entware.sh"
+  check_helper_api install_gcode_shell_command "$HELPER_DIR/scripts/gcode_shell_command.sh"
+  check_helper_api install_kamp "$HELPER_DIR/scripts/kamp.sh"
+  check_helper_api install_nozzle_cleaning_fan_control "$HELPER_DIR/scripts/nozzle_cleaning_fan_control.sh"
+  check_helper_api install_improved_shapers "$HELPER_DIR/scripts/improved_shapers.sh"
+  check_helper_api install_useful_macros "$HELPER_DIR/scripts/useful_macros.sh"
+  check_helper_api install_save_zoffset_macros "$HELPER_DIR/scripts/save_zoffset_macros.sh"
+  check_helper_api install_m600_support "$HELPER_DIR/scripts/m600_support.sh"
+  check_helper_api install_moonraker_timelapse "$HELPER_DIR/scripts/moonraker_timelapse.sh"
+
+  [ -f "$MENU" ] && pass "K1 install menu present" || fail "K1 install menu missing"
+
+  [ -d /usr/data/moonraker ] && pass "Moonraker installation directory present" || fail "Moonraker directory missing"
+  [ -d /usr/data/nginx ] && pass "Nginx installation directory present" || fail "Nginx directory missing"
+  [ -d /usr/data/fluidd ] && pass "Fluidd installation directory present" || fail "Fluidd directory missing"
+  [ -x /opt/bin/opkg ] && pass "Entware opkg present" || fail "Entware opkg missing"
+  [ -f /usr/share/klipper/klippy/extras/gcode_shell_command.py ] && pass "Gcode Shell component present" || fail "Gcode Shell component missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/KAMP ] && pass "KAMP config directory present" || fail "KAMP config directory missing"
+  [ -d /usr/share/klipper/klippy/extras/prtouch_v2_fan ] && pass "Nozzle Cleaning Fan Control present" || fail "Nozzle Cleaning Fan Control missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/improved-shapers ] && pass "Improved Shapers present" || fail "Improved Shapers missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/useful-macros.cfg ] && pass "Useful Macros present" || fail "Useful Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/save-zoffset.cfg ] && pass "Save Z-Offset Macros present" || fail "Save Z-Offset Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/M600-support.cfg ] && pass "M600 Support present" || fail "M600 Support missing"
+
+  [ -x /etc/init.d/S99mjpg_camera ] && pass "Camera boot service present" || warn "P3D camera boot service absent (may be unnecessary if stock stream persists)"
+  [ -x /etc/init.d/S98timelapse_cron ] && pass "Cleanup cron boot service present" || fail "Cleanup cron boot service missing"
+  [ -x /etc/init.d/S99z_p3d_healthcheck ] && pass "P3D boot healthcheck hook present" || fail "P3D boot healthcheck hook missing"
+
+  if [ -d "$MOONRAKER_REPO/.git" ]; then
+    TRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep -v '^?? ' || true)"
+    if [ -z "$TRACKED" ]; then pass "Moonraker tracked Git files clean"; else warn "Moonraker tracked Git changes detected:"; out "$TRACKED"; fi
+    UNTRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep '^?? ' | grep -v '^?? moonraker/components/timelapse.py$' | grep -v '^?? moonraker.conf$' | grep -v '^?? .files-list.before$' || true)"
+    if [ -z "$UNTRACKED" ]; then pass "No unexpected Moonraker untracked files"; else warn "Unexpected Moonraker untracked files:"; out "$UNTRACKED"; fi
+  else
+    fail "Moonraker Git repository missing"
+  fi
+
+  if wget -q -T 5 -O /tmp/p3d_printer_info.json 'http://127.0.0.1:7125/printer/info' 2>/dev/null; then
+    pass "Moonraker printer/info endpoint reachable"
+    grep -Eq '"state"[[:space:]]*:[[:space:]]*"(ready|standby)"' /tmp/p3d_printer_info.json && pass "Klipper state ready/standby" || warn "Klipper state not confirmed ready/standby"
+  else
+    warn "Moonraker printer/info endpoint unavailable"
+  fi
+
+  grep -q 'include Helper-Script/KAMP/KAMP_Settings.cfg' "$PRINTER_CFG" 2>/dev/null && pass "KAMP include enabled in printer.cfg" || fail "KAMP include missing"
+
+  PROVISION="$P3D_DIR/fluidd_provision.py"
+  PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+  if [ ! -x "$PYTHON" ]; then
+    PYTHON="$(command -v python3 2>/dev/null || true)"
+  fi
+  if [ -f "$PROVISION" ] && [ -n "$PYTHON" ] && [ -x "$PYTHON" ]; then
+    set +e
+    PROVISION_CHECK="$("$PYTHON" "$PROVISION" --check 2>&1)"
+    PROVISION_RC=$?
+    set -e
+    case "$PROVISION_RC" in
+      0) pass "Fluidd provisioning baseline OK" ;;
+      1) warn "Fluidd provisioning differs from P3D baseline: $PROVISION_CHECK" ;;
+      *) fail "Fluidd provisioning validation failed: $PROVISION_CHECK" ;;
+    esac
+  else
+    fail "Fluidd provisioning helper/runtime missing"
+  fi
+fi
+
+out ""
+out "========================================"
+out " RESULT"
+out "========================================"
+out "PASS: $PASS"
+out "WARN: $WARN"
+out "FAIL: $FAIL"
+
+if [ "$FAIL" -gt 0 ]; then STATUS="FAIL"; RC=2; elif [ "$WARN" -gt 0 ]; then STATUS="WARN"; RC=1; else STATUS="PASS"; RC=0; fi
+out "STATUS: $STATUS"
+out "========================================"
+
+echo "$STATUS" > "$STATUS_FILE"
+cat "$RUNLOG" >> "$LOG"
+rm -f "$RUNLOG"
+exit "$RC"
+ "$PRINTER_CFG" 2>/dev/null \
+     && grep -q '^\[delayed_gcode P3D_BOARD_FAN_CONTROL\]if [ -f "$LOGFILE" ]; then
+  CRIT="$(tail -400 "$LOGFILE" | grep -iE 'fatal|timelapse: .*not found|failed to load component|unable to load component|server initialization failed|unhandled exception' | tail -10 || true)"
+  [ -z "$CRIT" ] && pass "No obvious critical Moonraker errors in recent log" || { warn "Potential recent Moonraker errors:"; out "$CRIT"; }
+else
+  warn "Moonraker log not found"
+fi
+
+if [ "$MODE" = "--full" ]; then
+  out ""
+  out "--- FULL validation ---"
+
+  if [ -d "$HELPER_DIR/.git" ]; then
+    HC="$(cd "$HELPER_DIR" && git rev-parse HEAD 2>/dev/null || true)"
+    [ -n "$HC" ] && pass "Helper Script git revision: $HC" || fail "Cannot read Helper Script revision"
+    if [ "$HC" = "$HELPER_TESTED_COMMIT" ]; then pass "Helper Script matches tested deployment baseline"; else warn "Helper Script differs from tested deployment baseline $HELPER_TESTED_COMMIT"; fi
+  else
+    fail "Helper Script git repository missing"
+  fi
+
+  MENU="$HELPER_DIR/scripts/menu/K1/install_menu_K1.sh"
+
+  check_helper_api() {
+    token="$1"
+    file="$2"
+    if [ -f "$file" ] && grep -q "function $token" "$file" 2>/dev/null; then
+      pass "Helper API present: $token"
+    else
+      fail "Helper API missing: $token ($file)"
+    fi
+  }
+
+  check_helper_api install_moonraker_nginx "$HELPER_DIR/scripts/moonraker_nginx.sh"
+  check_helper_api install_fluidd "$HELPER_DIR/scripts/fluidd.sh"
+  check_helper_api install_entware "$HELPER_DIR/scripts/entware.sh"
+  check_helper_api install_gcode_shell_command "$HELPER_DIR/scripts/gcode_shell_command.sh"
+  check_helper_api install_kamp "$HELPER_DIR/scripts/kamp.sh"
+  check_helper_api install_nozzle_cleaning_fan_control "$HELPER_DIR/scripts/nozzle_cleaning_fan_control.sh"
+  check_helper_api install_improved_shapers "$HELPER_DIR/scripts/improved_shapers.sh"
+  check_helper_api install_useful_macros "$HELPER_DIR/scripts/useful_macros.sh"
+  check_helper_api install_save_zoffset_macros "$HELPER_DIR/scripts/save_zoffset_macros.sh"
+  check_helper_api install_m600_support "$HELPER_DIR/scripts/m600_support.sh"
+  check_helper_api install_moonraker_timelapse "$HELPER_DIR/scripts/moonraker_timelapse.sh"
+
+  [ -f "$MENU" ] && pass "K1 install menu present" || fail "K1 install menu missing"
+
+  [ -d /usr/data/moonraker ] && pass "Moonraker installation directory present" || fail "Moonraker directory missing"
+  [ -d /usr/data/nginx ] && pass "Nginx installation directory present" || fail "Nginx directory missing"
+  [ -d /usr/data/fluidd ] && pass "Fluidd installation directory present" || fail "Fluidd directory missing"
+  [ -x /opt/bin/opkg ] && pass "Entware opkg present" || fail "Entware opkg missing"
+  [ -f /usr/share/klipper/klippy/extras/gcode_shell_command.py ] && pass "Gcode Shell component present" || fail "Gcode Shell component missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/KAMP ] && pass "KAMP config directory present" || fail "KAMP config directory missing"
+  [ -d /usr/share/klipper/klippy/extras/prtouch_v2_fan ] && pass "Nozzle Cleaning Fan Control present" || fail "Nozzle Cleaning Fan Control missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/improved-shapers ] && pass "Improved Shapers present" || fail "Improved Shapers missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/useful-macros.cfg ] && pass "Useful Macros present" || fail "Useful Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/save-zoffset.cfg ] && pass "Save Z-Offset Macros present" || fail "Save Z-Offset Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/M600-support.cfg ] && pass "M600 Support present" || fail "M600 Support missing"
+
+  [ -x /etc/init.d/S99mjpg_camera ] && pass "Camera boot service present" || warn "P3D camera boot service absent (may be unnecessary if stock stream persists)"
+  [ -x /etc/init.d/S98timelapse_cron ] && pass "Cleanup cron boot service present" || fail "Cleanup cron boot service missing"
+  [ -x /etc/init.d/S99z_p3d_healthcheck ] && pass "P3D boot healthcheck hook present" || fail "P3D boot healthcheck hook missing"
+
+  if [ -d "$MOONRAKER_REPO/.git" ]; then
+    TRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep -v '^?? ' || true)"
+    if [ -z "$TRACKED" ]; then pass "Moonraker tracked Git files clean"; else warn "Moonraker tracked Git changes detected:"; out "$TRACKED"; fi
+    UNTRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep '^?? ' | grep -v '^?? moonraker/components/timelapse.py$' | grep -v '^?? moonraker.conf$' | grep -v '^?? .files-list.before$' || true)"
+    if [ -z "$UNTRACKED" ]; then pass "No unexpected Moonraker untracked files"; else warn "Unexpected Moonraker untracked files:"; out "$UNTRACKED"; fi
+  else
+    fail "Moonraker Git repository missing"
+  fi
+
+  if wget -q -T 5 -O /tmp/p3d_printer_info.json 'http://127.0.0.1:7125/printer/info' 2>/dev/null; then
+    pass "Moonraker printer/info endpoint reachable"
+    grep -Eq '"state"[[:space:]]*:[[:space:]]*"(ready|standby)"' /tmp/p3d_printer_info.json && pass "Klipper state ready/standby" || warn "Klipper state not confirmed ready/standby"
+  else
+    warn "Moonraker printer/info endpoint unavailable"
+  fi
+
+  grep -q 'include Helper-Script/KAMP/KAMP_Settings.cfg' "$PRINTER_CFG" 2>/dev/null && pass "KAMP include enabled in printer.cfg" || fail "KAMP include missing"
+
+  PROVISION="$P3D_DIR/fluidd_provision.py"
+  PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+  if [ ! -x "$PYTHON" ]; then
+    PYTHON="$(command -v python3 2>/dev/null || true)"
+  fi
+  if [ -f "$PROVISION" ] && [ -n "$PYTHON" ] && [ -x "$PYTHON" ]; then
+    set +e
+    PROVISION_CHECK="$("$PYTHON" "$PROVISION" --check 2>&1)"
+    PROVISION_RC=$?
+    set -e
+    case "$PROVISION_RC" in
+      0) pass "Fluidd provisioning baseline OK" ;;
+      1) warn "Fluidd provisioning differs from P3D baseline: $PROVISION_CHECK" ;;
+      *) fail "Fluidd provisioning validation failed: $PROVISION_CHECK" ;;
+    esac
+  else
+    fail "Fluidd provisioning helper/runtime missing"
+  fi
+fi
+
+out ""
+out "========================================"
+out " RESULT"
+out "========================================"
+out "PASS: $PASS"
+out "WARN: $WARN"
+out "FAIL: $FAIL"
+
+if [ "$FAIL" -gt 0 ]; then STATUS="FAIL"; RC=2; elif [ "$WARN" -gt 0 ]; then STATUS="WARN"; RC=1; else STATUS="PASS"; RC=0; fi
+out "STATUS: $STATUS"
+out "========================================"
+
+echo "$STATUS" > "$STATUS_FILE"
+cat "$RUNLOG" >> "$LOG"
+rm -f "$RUNLOG"
+exit "$RC"
+ "$PRINTER_CFG" 2>/dev/null \
+     && grep -q '^pin:[[:space:]]*PB2if [ -f "$LOGFILE" ]; then
+  CRIT="$(tail -400 "$LOGFILE" | grep -iE 'fatal|timelapse: .*not found|failed to load component|unable to load component|server initialization failed|unhandled exception' | tail -10 || true)"
+  [ -z "$CRIT" ] && pass "No obvious critical Moonraker errors in recent log" || { warn "Potential recent Moonraker errors:"; out "$CRIT"; }
+else
+  warn "Moonraker log not found"
+fi
+
+if [ "$MODE" = "--full" ]; then
+  out ""
+  out "--- FULL validation ---"
+
+  if [ -d "$HELPER_DIR/.git" ]; then
+    HC="$(cd "$HELPER_DIR" && git rev-parse HEAD 2>/dev/null || true)"
+    [ -n "$HC" ] && pass "Helper Script git revision: $HC" || fail "Cannot read Helper Script revision"
+    if [ "$HC" = "$HELPER_TESTED_COMMIT" ]; then pass "Helper Script matches tested deployment baseline"; else warn "Helper Script differs from tested deployment baseline $HELPER_TESTED_COMMIT"; fi
+  else
+    fail "Helper Script git repository missing"
+  fi
+
+  MENU="$HELPER_DIR/scripts/menu/K1/install_menu_K1.sh"
+
+  check_helper_api() {
+    token="$1"
+    file="$2"
+    if [ -f "$file" ] && grep -q "function $token" "$file" 2>/dev/null; then
+      pass "Helper API present: $token"
+    else
+      fail "Helper API missing: $token ($file)"
+    fi
+  }
+
+  check_helper_api install_moonraker_nginx "$HELPER_DIR/scripts/moonraker_nginx.sh"
+  check_helper_api install_fluidd "$HELPER_DIR/scripts/fluidd.sh"
+  check_helper_api install_entware "$HELPER_DIR/scripts/entware.sh"
+  check_helper_api install_gcode_shell_command "$HELPER_DIR/scripts/gcode_shell_command.sh"
+  check_helper_api install_kamp "$HELPER_DIR/scripts/kamp.sh"
+  check_helper_api install_nozzle_cleaning_fan_control "$HELPER_DIR/scripts/nozzle_cleaning_fan_control.sh"
+  check_helper_api install_improved_shapers "$HELPER_DIR/scripts/improved_shapers.sh"
+  check_helper_api install_useful_macros "$HELPER_DIR/scripts/useful_macros.sh"
+  check_helper_api install_save_zoffset_macros "$HELPER_DIR/scripts/save_zoffset_macros.sh"
+  check_helper_api install_m600_support "$HELPER_DIR/scripts/m600_support.sh"
+  check_helper_api install_moonraker_timelapse "$HELPER_DIR/scripts/moonraker_timelapse.sh"
+
+  [ -f "$MENU" ] && pass "K1 install menu present" || fail "K1 install menu missing"
+
+  [ -d /usr/data/moonraker ] && pass "Moonraker installation directory present" || fail "Moonraker directory missing"
+  [ -d /usr/data/nginx ] && pass "Nginx installation directory present" || fail "Nginx directory missing"
+  [ -d /usr/data/fluidd ] && pass "Fluidd installation directory present" || fail "Fluidd directory missing"
+  [ -x /opt/bin/opkg ] && pass "Entware opkg present" || fail "Entware opkg missing"
+  [ -f /usr/share/klipper/klippy/extras/gcode_shell_command.py ] && pass "Gcode Shell component present" || fail "Gcode Shell component missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/KAMP ] && pass "KAMP config directory present" || fail "KAMP config directory missing"
+  [ -d /usr/share/klipper/klippy/extras/prtouch_v2_fan ] && pass "Nozzle Cleaning Fan Control present" || fail "Nozzle Cleaning Fan Control missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/improved-shapers ] && pass "Improved Shapers present" || fail "Improved Shapers missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/useful-macros.cfg ] && pass "Useful Macros present" || fail "Useful Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/save-zoffset.cfg ] && pass "Save Z-Offset Macros present" || fail "Save Z-Offset Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/M600-support.cfg ] && pass "M600 Support present" || fail "M600 Support missing"
+
+  [ -x /etc/init.d/S99mjpg_camera ] && pass "Camera boot service present" || warn "P3D camera boot service absent (may be unnecessary if stock stream persists)"
+  [ -x /etc/init.d/S98timelapse_cron ] && pass "Cleanup cron boot service present" || fail "Cleanup cron boot service missing"
+  [ -x /etc/init.d/S99z_p3d_healthcheck ] && pass "P3D boot healthcheck hook present" || fail "P3D boot healthcheck hook missing"
+
+  if [ -d "$MOONRAKER_REPO/.git" ]; then
+    TRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep -v '^?? ' || true)"
+    if [ -z "$TRACKED" ]; then pass "Moonraker tracked Git files clean"; else warn "Moonraker tracked Git changes detected:"; out "$TRACKED"; fi
+    UNTRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep '^?? ' | grep -v '^?? moonraker/components/timelapse.py$' | grep -v '^?? moonraker.conf$' | grep -v '^?? .files-list.before$' || true)"
+    if [ -z "$UNTRACKED" ]; then pass "No unexpected Moonraker untracked files"; else warn "Unexpected Moonraker untracked files:"; out "$UNTRACKED"; fi
+  else
+    fail "Moonraker Git repository missing"
+  fi
+
+  if wget -q -T 5 -O /tmp/p3d_printer_info.json 'http://127.0.0.1:7125/printer/info' 2>/dev/null; then
+    pass "Moonraker printer/info endpoint reachable"
+    grep -Eq '"state"[[:space:]]*:[[:space:]]*"(ready|standby)"' /tmp/p3d_printer_info.json && pass "Klipper state ready/standby" || warn "Klipper state not confirmed ready/standby"
+  else
+    warn "Moonraker printer/info endpoint unavailable"
+  fi
+
+  grep -q 'include Helper-Script/KAMP/KAMP_Settings.cfg' "$PRINTER_CFG" 2>/dev/null && pass "KAMP include enabled in printer.cfg" || fail "KAMP include missing"
+
+  PROVISION="$P3D_DIR/fluidd_provision.py"
+  PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+  if [ ! -x "$PYTHON" ]; then
+    PYTHON="$(command -v python3 2>/dev/null || true)"
+  fi
+  if [ -f "$PROVISION" ] && [ -n "$PYTHON" ] && [ -x "$PYTHON" ]; then
+    set +e
+    PROVISION_CHECK="$("$PYTHON" "$PROVISION" --check 2>&1)"
+    PROVISION_RC=$?
+    set -e
+    case "$PROVISION_RC" in
+      0) pass "Fluidd provisioning baseline OK" ;;
+      1) warn "Fluidd provisioning differs from P3D baseline: $PROVISION_CHECK" ;;
+      *) fail "Fluidd provisioning validation failed: $PROVISION_CHECK" ;;
+    esac
+  else
+    fail "Fluidd provisioning helper/runtime missing"
+  fi
+fi
+
+out ""
+out "========================================"
+out " RESULT"
+out "========================================"
+out "PASS: $PASS"
+out "WARN: $WARN"
+out "FAIL: $FAIL"
+
+if [ "$FAIL" -gt 0 ]; then STATUS="FAIL"; RC=2; elif [ "$WARN" -gt 0 ]; then STATUS="WARN"; RC=1; else STATUS="PASS"; RC=0; fi
+out "STATUS: $STATUS"
+out "========================================"
+
+echo "$STATUS" > "$STATUS_FILE"
+cat "$RUNLOG" >> "$LOG"
+rm -f "$RUNLOG"
+exit "$RC"
+ "$PRINTER_CFG" 2>/dev/null \
+     && grep -q '^value:[[:space:]]*0\.50if [ -f "$LOGFILE" ]; then
+  CRIT="$(tail -400 "$LOGFILE" | grep -iE 'fatal|timelapse: .*not found|failed to load component|unable to load component|server initialization failed|unhandled exception' | tail -10 || true)"
+  [ -z "$CRIT" ] && pass "No obvious critical Moonraker errors in recent log" || { warn "Potential recent Moonraker errors:"; out "$CRIT"; }
+else
+  warn "Moonraker log not found"
+fi
+
+if [ "$MODE" = "--full" ]; then
+  out ""
+  out "--- FULL validation ---"
+
+  if [ -d "$HELPER_DIR/.git" ]; then
+    HC="$(cd "$HELPER_DIR" && git rev-parse HEAD 2>/dev/null || true)"
+    [ -n "$HC" ] && pass "Helper Script git revision: $HC" || fail "Cannot read Helper Script revision"
+    if [ "$HC" = "$HELPER_TESTED_COMMIT" ]; then pass "Helper Script matches tested deployment baseline"; else warn "Helper Script differs from tested deployment baseline $HELPER_TESTED_COMMIT"; fi
+  else
+    fail "Helper Script git repository missing"
+  fi
+
+  MENU="$HELPER_DIR/scripts/menu/K1/install_menu_K1.sh"
+
+  check_helper_api() {
+    token="$1"
+    file="$2"
+    if [ -f "$file" ] && grep -q "function $token" "$file" 2>/dev/null; then
+      pass "Helper API present: $token"
+    else
+      fail "Helper API missing: $token ($file)"
+    fi
+  }
+
+  check_helper_api install_moonraker_nginx "$HELPER_DIR/scripts/moonraker_nginx.sh"
+  check_helper_api install_fluidd "$HELPER_DIR/scripts/fluidd.sh"
+  check_helper_api install_entware "$HELPER_DIR/scripts/entware.sh"
+  check_helper_api install_gcode_shell_command "$HELPER_DIR/scripts/gcode_shell_command.sh"
+  check_helper_api install_kamp "$HELPER_DIR/scripts/kamp.sh"
+  check_helper_api install_nozzle_cleaning_fan_control "$HELPER_DIR/scripts/nozzle_cleaning_fan_control.sh"
+  check_helper_api install_improved_shapers "$HELPER_DIR/scripts/improved_shapers.sh"
+  check_helper_api install_useful_macros "$HELPER_DIR/scripts/useful_macros.sh"
+  check_helper_api install_save_zoffset_macros "$HELPER_DIR/scripts/save_zoffset_macros.sh"
+  check_helper_api install_m600_support "$HELPER_DIR/scripts/m600_support.sh"
+  check_helper_api install_moonraker_timelapse "$HELPER_DIR/scripts/moonraker_timelapse.sh"
+
+  [ -f "$MENU" ] && pass "K1 install menu present" || fail "K1 install menu missing"
+
+  [ -d /usr/data/moonraker ] && pass "Moonraker installation directory present" || fail "Moonraker directory missing"
+  [ -d /usr/data/nginx ] && pass "Nginx installation directory present" || fail "Nginx directory missing"
+  [ -d /usr/data/fluidd ] && pass "Fluidd installation directory present" || fail "Fluidd directory missing"
+  [ -x /opt/bin/opkg ] && pass "Entware opkg present" || fail "Entware opkg missing"
+  [ -f /usr/share/klipper/klippy/extras/gcode_shell_command.py ] && pass "Gcode Shell component present" || fail "Gcode Shell component missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/KAMP ] && pass "KAMP config directory present" || fail "KAMP config directory missing"
+  [ -d /usr/share/klipper/klippy/extras/prtouch_v2_fan ] && pass "Nozzle Cleaning Fan Control present" || fail "Nozzle Cleaning Fan Control missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/improved-shapers ] && pass "Improved Shapers present" || fail "Improved Shapers missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/useful-macros.cfg ] && pass "Useful Macros present" || fail "Useful Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/save-zoffset.cfg ] && pass "Save Z-Offset Macros present" || fail "Save Z-Offset Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/M600-support.cfg ] && pass "M600 Support present" || fail "M600 Support missing"
+
+  [ -x /etc/init.d/S99mjpg_camera ] && pass "Camera boot service present" || warn "P3D camera boot service absent (may be unnecessary if stock stream persists)"
+  [ -x /etc/init.d/S98timelapse_cron ] && pass "Cleanup cron boot service present" || fail "Cleanup cron boot service missing"
+  [ -x /etc/init.d/S99z_p3d_healthcheck ] && pass "P3D boot healthcheck hook present" || fail "P3D boot healthcheck hook missing"
+
+  if [ -d "$MOONRAKER_REPO/.git" ]; then
+    TRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep -v '^?? ' || true)"
+    if [ -z "$TRACKED" ]; then pass "Moonraker tracked Git files clean"; else warn "Moonraker tracked Git changes detected:"; out "$TRACKED"; fi
+    UNTRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep '^?? ' | grep -v '^?? moonraker/components/timelapse.py$' | grep -v '^?? moonraker.conf$' | grep -v '^?? .files-list.before$' || true)"
+    if [ -z "$UNTRACKED" ]; then pass "No unexpected Moonraker untracked files"; else warn "Unexpected Moonraker untracked files:"; out "$UNTRACKED"; fi
+  else
+    fail "Moonraker Git repository missing"
+  fi
+
+  if wget -q -T 5 -O /tmp/p3d_printer_info.json 'http://127.0.0.1:7125/printer/info' 2>/dev/null; then
+    pass "Moonraker printer/info endpoint reachable"
+    grep -Eq '"state"[[:space:]]*:[[:space:]]*"(ready|standby)"' /tmp/p3d_printer_info.json && pass "Klipper state ready/standby" || warn "Klipper state not confirmed ready/standby"
+  else
+    warn "Moonraker printer/info endpoint unavailable"
+  fi
+
+  grep -q 'include Helper-Script/KAMP/KAMP_Settings.cfg' "$PRINTER_CFG" 2>/dev/null && pass "KAMP include enabled in printer.cfg" || fail "KAMP include missing"
+
+  PROVISION="$P3D_DIR/fluidd_provision.py"
+  PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+  if [ ! -x "$PYTHON" ]; then
+    PYTHON="$(command -v python3 2>/dev/null || true)"
+  fi
+  if [ -f "$PROVISION" ] && [ -n "$PYTHON" ] && [ -x "$PYTHON" ]; then
+    set +e
+    PROVISION_CHECK="$("$PYTHON" "$PROVISION" --check 2>&1)"
+    PROVISION_RC=$?
+    set -e
+    case "$PROVISION_RC" in
+      0) pass "Fluidd provisioning baseline OK" ;;
+      1) warn "Fluidd provisioning differs from P3D baseline: $PROVISION_CHECK" ;;
+      *) fail "Fluidd provisioning validation failed: $PROVISION_CHECK" ;;
+    esac
+  else
+    fail "Fluidd provisioning helper/runtime missing"
+  fi
+fi
+
+out ""
+out "========================================"
+out " RESULT"
+out "========================================"
+out "PASS: $PASS"
+out "WARN: $WARN"
+out "FAIL: $FAIL"
+
+if [ "$FAIL" -gt 0 ]; then STATUS="FAIL"; RC=2; elif [ "$WARN" -gt 0 ]; then STATUS="WARN"; RC=1; else STATUS="PASS"; RC=0; fi
+out "STATUS: $STATUS"
+out "========================================"
+
+echo "$STATUS" > "$STATUS_FILE"
+cat "$RUNLOG" >> "$LOG"
+rm -f "$RUNLOG"
+exit "$RC"
+ "$PRINTER_CFG" 2>/dev/null \
+     && grep -q '^shutdown_value:[[:space:]]*1\.0if [ -f "$LOGFILE" ]; then
+  CRIT="$(tail -400 "$LOGFILE" | grep -iE 'fatal|timelapse: .*not found|failed to load component|unable to load component|server initialization failed|unhandled exception' | tail -10 || true)"
+  [ -z "$CRIT" ] && pass "No obvious critical Moonraker errors in recent log" || { warn "Potential recent Moonraker errors:"; out "$CRIT"; }
+else
+  warn "Moonraker log not found"
+fi
+
+if [ "$MODE" = "--full" ]; then
+  out ""
+  out "--- FULL validation ---"
+
+  if [ -d "$HELPER_DIR/.git" ]; then
+    HC="$(cd "$HELPER_DIR" && git rev-parse HEAD 2>/dev/null || true)"
+    [ -n "$HC" ] && pass "Helper Script git revision: $HC" || fail "Cannot read Helper Script revision"
+    if [ "$HC" = "$HELPER_TESTED_COMMIT" ]; then pass "Helper Script matches tested deployment baseline"; else warn "Helper Script differs from tested deployment baseline $HELPER_TESTED_COMMIT"; fi
+  else
+    fail "Helper Script git repository missing"
+  fi
+
+  MENU="$HELPER_DIR/scripts/menu/K1/install_menu_K1.sh"
+
+  check_helper_api() {
+    token="$1"
+    file="$2"
+    if [ -f "$file" ] && grep -q "function $token" "$file" 2>/dev/null; then
+      pass "Helper API present: $token"
+    else
+      fail "Helper API missing: $token ($file)"
+    fi
+  }
+
+  check_helper_api install_moonraker_nginx "$HELPER_DIR/scripts/moonraker_nginx.sh"
+  check_helper_api install_fluidd "$HELPER_DIR/scripts/fluidd.sh"
+  check_helper_api install_entware "$HELPER_DIR/scripts/entware.sh"
+  check_helper_api install_gcode_shell_command "$HELPER_DIR/scripts/gcode_shell_command.sh"
+  check_helper_api install_kamp "$HELPER_DIR/scripts/kamp.sh"
+  check_helper_api install_nozzle_cleaning_fan_control "$HELPER_DIR/scripts/nozzle_cleaning_fan_control.sh"
+  check_helper_api install_improved_shapers "$HELPER_DIR/scripts/improved_shapers.sh"
+  check_helper_api install_useful_macros "$HELPER_DIR/scripts/useful_macros.sh"
+  check_helper_api install_save_zoffset_macros "$HELPER_DIR/scripts/save_zoffset_macros.sh"
+  check_helper_api install_m600_support "$HELPER_DIR/scripts/m600_support.sh"
+  check_helper_api install_moonraker_timelapse "$HELPER_DIR/scripts/moonraker_timelapse.sh"
+
+  [ -f "$MENU" ] && pass "K1 install menu present" || fail "K1 install menu missing"
+
+  [ -d /usr/data/moonraker ] && pass "Moonraker installation directory present" || fail "Moonraker directory missing"
+  [ -d /usr/data/nginx ] && pass "Nginx installation directory present" || fail "Nginx directory missing"
+  [ -d /usr/data/fluidd ] && pass "Fluidd installation directory present" || fail "Fluidd directory missing"
+  [ -x /opt/bin/opkg ] && pass "Entware opkg present" || fail "Entware opkg missing"
+  [ -f /usr/share/klipper/klippy/extras/gcode_shell_command.py ] && pass "Gcode Shell component present" || fail "Gcode Shell component missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/KAMP ] && pass "KAMP config directory present" || fail "KAMP config directory missing"
+  [ -d /usr/share/klipper/klippy/extras/prtouch_v2_fan ] && pass "Nozzle Cleaning Fan Control present" || fail "Nozzle Cleaning Fan Control missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/improved-shapers ] && pass "Improved Shapers present" || fail "Improved Shapers missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/useful-macros.cfg ] && pass "Useful Macros present" || fail "Useful Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/save-zoffset.cfg ] && pass "Save Z-Offset Macros present" || fail "Save Z-Offset Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/M600-support.cfg ] && pass "M600 Support present" || fail "M600 Support missing"
+
+  [ -x /etc/init.d/S99mjpg_camera ] && pass "Camera boot service present" || warn "P3D camera boot service absent (may be unnecessary if stock stream persists)"
+  [ -x /etc/init.d/S98timelapse_cron ] && pass "Cleanup cron boot service present" || fail "Cleanup cron boot service missing"
+  [ -x /etc/init.d/S99z_p3d_healthcheck ] && pass "P3D boot healthcheck hook present" || fail "P3D boot healthcheck hook missing"
+
+  if [ -d "$MOONRAKER_REPO/.git" ]; then
+    TRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep -v '^?? ' || true)"
+    if [ -z "$TRACKED" ]; then pass "Moonraker tracked Git files clean"; else warn "Moonraker tracked Git changes detected:"; out "$TRACKED"; fi
+    UNTRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep '^?? ' | grep -v '^?? moonraker/components/timelapse.py$' | grep -v '^?? moonraker.conf$' | grep -v '^?? .files-list.before$' || true)"
+    if [ -z "$UNTRACKED" ]; then pass "No unexpected Moonraker untracked files"; else warn "Unexpected Moonraker untracked files:"; out "$UNTRACKED"; fi
+  else
+    fail "Moonraker Git repository missing"
+  fi
+
+  if wget -q -T 5 -O /tmp/p3d_printer_info.json 'http://127.0.0.1:7125/printer/info' 2>/dev/null; then
+    pass "Moonraker printer/info endpoint reachable"
+    grep -Eq '"state"[[:space:]]*:[[:space:]]*"(ready|standby)"' /tmp/p3d_printer_info.json && pass "Klipper state ready/standby" || warn "Klipper state not confirmed ready/standby"
+  else
+    warn "Moonraker printer/info endpoint unavailable"
+  fi
+
+  grep -q 'include Helper-Script/KAMP/KAMP_Settings.cfg' "$PRINTER_CFG" 2>/dev/null && pass "KAMP include enabled in printer.cfg" || fail "KAMP include missing"
+
+  PROVISION="$P3D_DIR/fluidd_provision.py"
+  PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+  if [ ! -x "$PYTHON" ]; then
+    PYTHON="$(command -v python3 2>/dev/null || true)"
+  fi
+  if [ -f "$PROVISION" ] && [ -n "$PYTHON" ] && [ -x "$PYTHON" ]; then
+    set +e
+    PROVISION_CHECK="$("$PYTHON" "$PROVISION" --check 2>&1)"
+    PROVISION_RC=$?
+    set -e
+    case "$PROVISION_RC" in
+      0) pass "Fluidd provisioning baseline OK" ;;
+      1) warn "Fluidd provisioning differs from P3D baseline: $PROVISION_CHECK" ;;
+      *) fail "Fluidd provisioning validation failed: $PROVISION_CHECK" ;;
+    esac
+  else
+    fail "Fluidd provisioning helper/runtime missing"
+  fi
+fi
+
+out ""
+out "========================================"
+out " RESULT"
+out "========================================"
+out "PASS: $PASS"
+out "WARN: $WARN"
+out "FAIL: $FAIL"
+
+if [ "$FAIL" -gt 0 ]; then STATUS="FAIL"; RC=2; elif [ "$WARN" -gt 0 ]; then STATUS="WARN"; RC=1; else STATUS="PASS"; RC=0; fi
+out "STATUS: $STATUS"
+out "========================================"
+
+echo "$STATUS" > "$STATUS_FILE"
+cat "$RUNLOG" >> "$LOG"
+rm -f "$RUNLOG"
+exit "$RC"
+ "$PRINTER_CFG" 2>/dev/null; then
+    pass "K1 Max motherboard fan CF0502 baseline present"
+  else
+    fail "K1 Max motherboard fan CF0502 baseline missing or incomplete"
+  fi
+  grep -q '^\[controller_fan board_fan\]if [ -f "$LOGFILE" ]; then
+  CRIT="$(tail -400 "$LOGFILE" | grep -iE 'fatal|timelapse: .*not found|failed to load component|unable to load component|server initialization failed|unhandled exception' | tail -10 || true)"
+  [ -z "$CRIT" ] && pass "No obvious critical Moonraker errors in recent log" || { warn "Potential recent Moonraker errors:"; out "$CRIT"; }
+else
+  warn "Moonraker log not found"
+fi
+
+if [ "$MODE" = "--full" ]; then
+  out ""
+  out "--- FULL validation ---"
+
+  if [ -d "$HELPER_DIR/.git" ]; then
+    HC="$(cd "$HELPER_DIR" && git rev-parse HEAD 2>/dev/null || true)"
+    [ -n "$HC" ] && pass "Helper Script git revision: $HC" || fail "Cannot read Helper Script revision"
+    if [ "$HC" = "$HELPER_TESTED_COMMIT" ]; then pass "Helper Script matches tested deployment baseline"; else warn "Helper Script differs from tested deployment baseline $HELPER_TESTED_COMMIT"; fi
+  else
+    fail "Helper Script git repository missing"
+  fi
+
+  MENU="$HELPER_DIR/scripts/menu/K1/install_menu_K1.sh"
+
+  check_helper_api() {
+    token="$1"
+    file="$2"
+    if [ -f "$file" ] && grep -q "function $token" "$file" 2>/dev/null; then
+      pass "Helper API present: $token"
+    else
+      fail "Helper API missing: $token ($file)"
+    fi
+  }
+
+  check_helper_api install_moonraker_nginx "$HELPER_DIR/scripts/moonraker_nginx.sh"
+  check_helper_api install_fluidd "$HELPER_DIR/scripts/fluidd.sh"
+  check_helper_api install_entware "$HELPER_DIR/scripts/entware.sh"
+  check_helper_api install_gcode_shell_command "$HELPER_DIR/scripts/gcode_shell_command.sh"
+  check_helper_api install_kamp "$HELPER_DIR/scripts/kamp.sh"
+  check_helper_api install_nozzle_cleaning_fan_control "$HELPER_DIR/scripts/nozzle_cleaning_fan_control.sh"
+  check_helper_api install_improved_shapers "$HELPER_DIR/scripts/improved_shapers.sh"
+  check_helper_api install_useful_macros "$HELPER_DIR/scripts/useful_macros.sh"
+  check_helper_api install_save_zoffset_macros "$HELPER_DIR/scripts/save_zoffset_macros.sh"
+  check_helper_api install_m600_support "$HELPER_DIR/scripts/m600_support.sh"
+  check_helper_api install_moonraker_timelapse "$HELPER_DIR/scripts/moonraker_timelapse.sh"
+
+  [ -f "$MENU" ] && pass "K1 install menu present" || fail "K1 install menu missing"
+
+  [ -d /usr/data/moonraker ] && pass "Moonraker installation directory present" || fail "Moonraker directory missing"
+  [ -d /usr/data/nginx ] && pass "Nginx installation directory present" || fail "Nginx directory missing"
+  [ -d /usr/data/fluidd ] && pass "Fluidd installation directory present" || fail "Fluidd directory missing"
+  [ -x /opt/bin/opkg ] && pass "Entware opkg present" || fail "Entware opkg missing"
+  [ -f /usr/share/klipper/klippy/extras/gcode_shell_command.py ] && pass "Gcode Shell component present" || fail "Gcode Shell component missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/KAMP ] && pass "KAMP config directory present" || fail "KAMP config directory missing"
+  [ -d /usr/share/klipper/klippy/extras/prtouch_v2_fan ] && pass "Nozzle Cleaning Fan Control present" || fail "Nozzle Cleaning Fan Control missing"
+  [ -d /usr/data/printer_data/config/Helper-Script/improved-shapers ] && pass "Improved Shapers present" || fail "Improved Shapers missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/useful-macros.cfg ] && pass "Useful Macros present" || fail "Useful Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/save-zoffset.cfg ] && pass "Save Z-Offset Macros present" || fail "Save Z-Offset Macros missing"
+  [ -f /usr/data/printer_data/config/Helper-Script/M600-support.cfg ] && pass "M600 Support present" || fail "M600 Support missing"
+
+  [ -x /etc/init.d/S99mjpg_camera ] && pass "Camera boot service present" || warn "P3D camera boot service absent (may be unnecessary if stock stream persists)"
+  [ -x /etc/init.d/S98timelapse_cron ] && pass "Cleanup cron boot service present" || fail "Cleanup cron boot service missing"
+  [ -x /etc/init.d/S99z_p3d_healthcheck ] && pass "P3D boot healthcheck hook present" || fail "P3D boot healthcheck hook missing"
+
+  if [ -d "$MOONRAKER_REPO/.git" ]; then
+    TRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep -v '^?? ' || true)"
+    if [ -z "$TRACKED" ]; then pass "Moonraker tracked Git files clean"; else warn "Moonraker tracked Git changes detected:"; out "$TRACKED"; fi
+    UNTRACKED="$(cd "$MOONRAKER_REPO" && git status --porcelain 2>/dev/null | grep '^?? ' | grep -v '^?? moonraker/components/timelapse.py$' | grep -v '^?? moonraker.conf$' | grep -v '^?? .files-list.before$' || true)"
+    if [ -z "$UNTRACKED" ]; then pass "No unexpected Moonraker untracked files"; else warn "Unexpected Moonraker untracked files:"; out "$UNTRACKED"; fi
+  else
+    fail "Moonraker Git repository missing"
+  fi
+
+  if wget -q -T 5 -O /tmp/p3d_printer_info.json 'http://127.0.0.1:7125/printer/info' 2>/dev/null; then
+    pass "Moonraker printer/info endpoint reachable"
+    grep -Eq '"state"[[:space:]]*:[[:space:]]*"(ready|standby)"' /tmp/p3d_printer_info.json && pass "Klipper state ready/standby" || warn "Klipper state not confirmed ready/standby"
+  else
+    warn "Moonraker printer/info endpoint unavailable"
+  fi
+
+  grep -q 'include Helper-Script/KAMP/KAMP_Settings.cfg' "$PRINTER_CFG" 2>/dev/null && pass "KAMP include enabled in printer.cfg" || fail "KAMP include missing"
+
+  PROVISION="$P3D_DIR/fluidd_provision.py"
+  PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+  if [ ! -x "$PYTHON" ]; then
+    PYTHON="$(command -v python3 2>/dev/null || true)"
+  fi
+  if [ -f "$PROVISION" ] && [ -n "$PYTHON" ] && [ -x "$PYTHON" ]; then
+    set +e
+    PROVISION_CHECK="$("$PYTHON" "$PROVISION" --check 2>&1)"
+    PROVISION_RC=$?
+    set -e
+    case "$PROVISION_RC" in
+      0) pass "Fluidd provisioning baseline OK" ;;
+      1) warn "Fluidd provisioning differs from P3D baseline: $PROVISION_CHECK" ;;
+      *) fail "Fluidd provisioning validation failed: $PROVISION_CHECK" ;;
+    esac
+  else
+    fail "Fluidd provisioning helper/runtime missing"
+  fi
+fi
+
+out ""
+out "========================================"
+out " RESULT"
+out "========================================"
+out "PASS: $PASS"
+out "WARN: $WARN"
+out "FAIL: $FAIL"
+
+if [ "$FAIL" -gt 0 ]; then STATUS="FAIL"; RC=2; elif [ "$WARN" -gt 0 ]; then STATUS="WARN"; RC=1; else STATUS="PASS"; RC=0; fi
+out "STATUS: $STATUS"
+out "========================================"
+
+echo "$STATUS" > "$STATUS_FILE"
+cat "$RUNLOG" >> "$LOG"
+rm -f "$RUNLOG"
+exit "$RC"
+ "$PRINTER_CFG" 2>/dev/null \
+    && fail "Legacy K1 Max controller_fan board_fan detected" \
+    || pass "Legacy K1 Max controller_fan board_fan absent"
+  if sed -n '/^\[multi_pin heater_fans\]$/,/^\[/p' "$PRINTER_CFG" 2>/dev/null | grep -q 'PB2'; then
+    fail "K1 Max PB2 still tied to heater_fans"
+  else
+    pass "K1 Max PB2 removed from heater_fans"
+  fi
+fi
+
 LOGFILE="/usr/data/printer_data/logs/moonraker.log"
 if [ -f "$LOGFILE" ]; then
   CRIT="$(tail -400 "$LOGFILE" | grep -iE 'fatal|timelapse: .*not found|failed to load component|unable to load component|server initialization failed|unhandled exception' | tail -10 || true)"

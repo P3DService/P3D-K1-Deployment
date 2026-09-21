@@ -13,14 +13,14 @@ P3D K1 Deployment превращает rooted K1-series в воспроизво�
 
 ## Текущий stable baseline
 
-**v0.6.0**
+**v0.6.1**
 
 Проверено на:
 
 - Creality K1C ×3
 - Creality K1 Max ×1
 
-Финальный FULL:
+FULL базового v0.6.0:
 
 ```
 PASS: 56
@@ -28,6 +28,8 @@ WARN: 0
 FAIL: 0
 STATUS: PASS
 ```
+
+v0.6.1 дополнительно включает field-validated исправление CF0502 вентилятора платы K1 Max.
 
 Протестированный Creality Helper Script commit:
 
@@ -44,6 +46,7 @@ b46787a61b3ce2f04ec04d115a73a46c26814057
 - останавливается при непроверенной revision Helper Script;
 - устанавливает approved modules;
 - блокирует `Fans Control Macros` в текущем baseline;
+- применяет K1 Max baseline для устранения ложной CF0502 вентилятора материнской платы;
 - проверяет/восстанавливает MJPEG camera runtime;
 - отключает штатный Creality Timelapse;
 - включает Moonraker Timelapse;
@@ -99,6 +102,14 @@ aspect_ratio: 4:3
 
 Если database-managed camera уже существует, её `name` и `uid` сохраняются. Относительные URL не зависят от IP принтера.
 
+## Известные проблемы / Troubleshooting
+
+Если **K1 Max** показывает `CF0502`, `Mainboard fan exception`, `Motherboard fan running abnormal` или ошибку вентилятора материнской платы:
+
+- [K1 Max: CF0502 / ошибка вентилятора материнской платы](docs/ru/K1_MAX_CF0502.md)
+
+В baseline v0.6.1 вентилятор платы не переходит в 0 RPM, а healthcheck проверяет правильность конфигурации.
+
 ## Быстрый старт
 
 После получения root:
@@ -111,7 +122,7 @@ ssh root@PRINTER_IP
 
 ```bash
 wget -q -O /tmp/p3d-k1-install.sh \
-  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.1/install.sh
 
 cat /tmp/p3d-k1-install.sh
 sh /tmp/p3d-k1-install.sh
@@ -120,7 +131,7 @@ sh /tmp/p3d-k1-install.sh
 One-liner:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.1/install.sh | sh
 ```
 
 > На некоторых stock BusyBox выводится `TLS certificate validation not implemented`. Подробности и trade-off — в [Troubleshooting](docs/ru/TROUBLESHOOTING.md).
@@ -193,9 +204,11 @@ tail -100 /usr/data/scripts/p3d-k1/deploy.log
 - [Fluidd provisioning](docs/ru/FLUIDD_PROVISIONING.md)
 - [Архитектура](docs/ru/ARCHITECTURE.md)
 - [Troubleshooting](docs/ru/TROUBLESHOOTING.md)
+- [K1 Max: CF0502 / ошибка вентилятора материнской платы](docs/ru/K1_MAX_CF0502.md)
 - [TMC2209: перегрев во время холодной калибровки](docs/ru/TMC2209_OVERHEAT.md)
 - [K1 Max: уклон Bed Mesh и синхронизация Z](docs/ru/BED_MESH_Z_SYNC.md)
 - [Валидация](docs/ru/VALIDATION.md)
+- [Release notes v0.6.1](docs/ru/RELEASE_v0.6.1.md)
 - [Release notes v0.6.0](docs/ru/RELEASE_v0.6.0.md)
 
 ### English

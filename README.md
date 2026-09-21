@@ -20,7 +20,7 @@ Validated on:
 - Creality K1C ×3
 - Creality K1 Max ×1
 
-Final FULL validation:
+v0.6.0 base FULL validation:
 
 ```
 PASS: 56
@@ -28,6 +28,8 @@ WARN: 0
 FAIL: 0
 STATUS: PASS
 ```
+
+v0.6.1 additionally includes the field-validated K1 Max CF0502 motherboard-fan fix.
 
 Tested Creality Helper Script commit:
 

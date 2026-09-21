@@ -202,6 +202,13 @@ PYEOF
     fail "Legacy controller_fan board_fan still present"
   fi
   pass "K1 Max board fan CF0502 compatibility patch installed"
+
+  if restart_klipper >>"$LOG" 2>&1; then
+    pass "Klipper restarted to apply K1 Max board-fan baseline"
+  else
+    fail "Klipper restart failed after K1 Max board-fan patch"
+  fi
+  sleep 5
 else
   pass "K1 Max board fan patch not applicable to this model"
 fi

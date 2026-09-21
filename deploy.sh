@@ -124,7 +124,8 @@ import re
 import sys
 
 path = Path(sys.argv[1])
-text = path.read_text()
+original = path.read_text()
+text = original
 
 fixed = """# P3D: mainboard fan must never stop; Creality raises CF0502 after sustained 0 RPM.
 # 50% idle cooling, 100% above 48C MCU temperature, with 42C/48C hysteresis.
@@ -151,18 +152,15 @@ gcode:
 """
 
 if "[output_pin board_fan]" in text and "[delayed_gcode P3D_BOARD_FAN_CONTROL]" in text:
-    # Reconcile an existing P3D block to the canonical field-validated form.
-    text = re.sub(
+    pattern = (
         r'(?ms)^# P3D: mainboard fan must never stop;.*?'
         r'^\[output_pin board_fan\]\n.*?'
-        r'^\[delayed_gcode P3D_BOARD_FAN_CONTROL\]\n.*?(?=^\[|\Z)',
-        fixed + "\n",
-        text,
-        count=1,
+        r'^\[delayed_gcode P3D_BOARD_FAN_CONTROL\]\n.*?(?=^\[|\Z)'
     )
+    text, count = re.subn(pattern, fixed + "\n", text, count=1)
+    if count != 1:
+        raise SystemExit("cannot reconcile existing P3D board-fan block")
 elif "[controller_fan board_fan]" in text:
-    # Replace the earlier P3D controller_fan approach. Its idle_timeout
-    # eventually stops PB2 and Creality raises CF0502 after sustained 0 RPM.
     pattern = (
         r'(?ms)^(?:# P3D: cool the mainboard during cold calibration and motor holding\.\n)?'
         r'\[controller_fan board_fan\]\n.*?(?=^\[|\Z)'
@@ -171,7 +169,6 @@ elif "[controller_fan board_fan]" in text:
     if count != 1:
         raise SystemExit("cannot replace existing [controller_fan board_fan]")
 else:
-    # Stock K1 Max ties PB2 to the hotend heater-fan multi_pin.
     m = re.search(r'(?ms)^\[multi_pin heater_fans\]\n(.*?)(?=^\[|\Z)', text)
     if not m:
         raise SystemExit("K1 Max [multi_pin heater_fans] section not found")
@@ -413,7 +410,7 @@ esac
 
 backup = path.with_name("printer.cfg.p3d-pre-cf0502-fix")
 if not backup.exists():
-    backup.write_text(path.read_text())
+    backup.write_text(original)
 path.write_text(text)
 PYEOF
 

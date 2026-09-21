@@ -162,7 +162,7 @@ wget: note: TLS certificate validation not implemented
 
 ```bash
 wget -q -O /tmp/p3d-k1-install.sh \
-  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.1/install.sh
 
 cat /tmp/p3d-k1-install.sh
 sh /tmp/p3d-k1-install.sh
@@ -170,6 +170,14 @@ sh /tmp/p3d-k1-install.sh
 
 Если в вашей среде доступен клиент с полноценной TLS-валидацией, предпочтительно использовать его для загрузки bootstrap.
 
+
+## K1 Max: CF0502 / ошибка вентилятора материнской платы
+
+Если K1 Max показывает `CF0502`, `Mainboard fan exception`, `Motherboard fan running abnormal` или ошибку вентилятора материнской платы, используйте отдельный field-validated кейс:
+
+- [K1 Max: CF0502 / ошибка вентилятора материнской платы](K1_MAX_CF0502.md)
+
+Не отключайте контроль ошибки вслепую: в инструкции сначала отделяется подтверждённый software-control кейс от реальной неисправности вентилятора, тахосигнала или проводки.
 
 ## Перегрев TMC2209 во время холодной калибровки
 

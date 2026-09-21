@@ -20,7 +20,7 @@ P3D K1 Deployment превращает rooted K1-series в воспроизво�
 - Creality K1C ×3
 - Creality K1 Max ×1
 
-Финальный FULL:
+FULL базового v0.6.0:
 
 ```
 PASS: 56
@@ -28,6 +28,8 @@ WARN: 0
 FAIL: 0
 STATUS: PASS
 ```
+
+v0.6.1 дополнительно включает field-validated исправление CF0502 вентилятора платы K1 Max.
 
 Протестированный Creality Helper Script commit:
 

@@ -107,6 +107,1428 @@ if [ -f "$FAN_CONTROLS_FILE" ]; then
 fi
 pass "Fans Control Macros absent"
 
+step "K1 Max motherboard fan compatibility"
+if echo "$MODEL_RAW" | grep -qi 'K1[[:space:]_-]*Max'; then
+  PRINTER_CFG="/usr/data/printer_data/config/printer.cfg"
+  [ -f "$PRINTER_CFG" ] || fail "$PRINTER_CFG missing"
+
+  BOARD_FAN_PY="/usr/data/moonraker/moonraker-env/bin/python"
+  if [ ! -x "$BOARD_FAN_PY" ]; then
+    BOARD_FAN_PY="$(command -v python3 2>/dev/null || true)"
+  fi
+  [ -n "$BOARD_FAN_PY" ] && [ -x "$BOARD_FAN_PY" ] || fail "Python 3 runtime not found for K1 Max board-fan compatibility patch"
+
+  "$BOARD_FAN_PY" - "$PRINTER_CFG" <<'PYEOF'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+
+fixed = """# P3D: mainboard fan must never stop; Creality raises CF0502 after sustained 0 RPM.
+# 50% idle cooling, 100% above 48C MCU temperature, with 42C/48C hysteresis.
+[output_pin board_fan]
+pin: PB2
+pwm: True
+cycle_time: 0.010
+value: 0.50
+shutdown_value: 1.0
+
+[delayed_gcode P3D_BOARD_FAN_CONTROL]
+initial_duration: 2
+gcode:
+    {% set temp = printer["temperature_sensor mcu_temp"].temperature|float %}
+    {% set speed = printer["output_pin board_fan"].value|float %}
+    {% if temp >= 48.0 %}
+        SET_PIN PIN=board_fan VALUE=1.0
+    {% elif temp <= 42.0 %}
+        SET_PIN PIN=board_fan VALUE=0.50
+    {% elif speed < 0.50 %}
+        SET_PIN PIN=board_fan VALUE=0.50
+    {% endif %}
+    UPDATE_DELAYED_GCODE ID=P3D_BOARD_FAN_CONTROL DURATION=5
+"""
+
+if "[output_pin board_fan]" in text and "[delayed_gcode P3D_BOARD_FAN_CONTROL]" in text:
+    # Reconcile an existing P3D block to the canonical field-validated form.
+    text = re.sub(
+        r'(?ms)^# P3D: mainboard fan must never stop;.*?'
+        r'^\[output_pin board_fan\]\n.*?'
+        r'^\[delayed_gcode P3D_BOARD_FAN_CONTROL\]\n.*?(?=^\[|\Z)',
+        fixed + "\n",
+        text,
+        count=1,
+    )
+elif "[controller_fan board_fan]" in text:
+    # Replace the earlier P3D controller_fan approach. Its idle_timeout
+    # eventually stops PB2 and Creality raises CF0502 after sustained 0 RPM.
+    pattern = (
+        r'(?ms)^(?:# P3D: cool the mainboard during cold calibration and motor holding\.\n)?'
+        r'\[controller_fan board_fan\]\n.*?(?=^\[|\Z)'
+    )
+    text, count = re.subn(pattern, fixed + "\n", text, count=1)
+    if count != 1:
+        raise SystemExit("cannot replace existing [controller_fan board_fan]")
+else:
+    # Stock K1 Max ties PB2 to the hotend heater-fan multi_pin.
+    m = re.search(r'(?ms)^\[multi_pin heater_fans\]\n(.*?)(?=^\[|\Z)', text)
+    if not m:
+        raise SystemExit("K1 Max [multi_pin heater_fans] section not found")
+    section = m.group(0)
+    pin_line = re.search(r'(?m)^pins\s*:\s*(.+)CAMERA_OK=0
+rm -f /tmp/p3d_snapshot.jpg
+if wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' 2>/dev/null; then
+  SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+  [ "$SIZE" -gt 1000 ] && CAMERA_OK=1
+fi
+
+if [ "$CAMERA_OK" -eq 0 ]; then
+  [ -x /usr/bin/mjpg_streamer ] || fail "Camera snapshot unavailable and /usr/bin/mjpg_streamer missing"
+  [ -d /usr/lib/mjpg-streamer ] || fail "Camera snapshot unavailable and /usr/lib/mjpg-streamer missing"
+  cat > /etc/init.d/S99mjpg_camera <<'CAMERAEOF'
+#!/bin/sh
+PIDFILE=/var/run/main-video-4_mjpg.pid
+MJPG=/usr/bin/mjpg_streamer
+LIB=/usr/lib/mjpg-streamer
+case "$1" in
+  start)
+    pidof mjpg_streamer >/dev/null 2>&1 && exit 0
+    LD_LIBRARY_PATH="$LIB" start-stop-daemon -S -b -m -p "$PIDFILE" --exec "$MJPG" -- \
+      -i "input_memfd.so -t 0" \
+      -o "output_http.so -w /usr/share/mjpg-streamer/www/ -p 8080"
+    ;;
+  stop)
+    start-stop-daemon -K -p "$PIDFILE" 2>/dev/null || true
+    rm -f "$PIDFILE"
+    ;;
+  restart|reload)
+    "$0" stop; sleep 1; "$0" start
+    ;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CAMERAEOF
+  chmod +x /etc/init.d/S99mjpg_camera
+  /etc/init.d/S99mjpg_camera restart
+  sleep 2
+fi
+
+rm -f /tmp/p3d_snapshot.jpg
+wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' || fail "Camera snapshot test failed"
+SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+[ "$SIZE" -gt 1000 ] || fail "Camera snapshot invalid ($SIZE bytes)"
+pass "Camera snapshot OK ($SIZE bytes)"
+
+step "Stock Creality timelapse OFF"
+CREALITY_CFG="/usr/data/creality/userdata/config/user_print_refer.json"
+if [ -f "$CREALITY_CFG" ]; then
+  [ -f "$CREALITY_CFG.p3d-original" ] || cp -p "$CREALITY_CFG" "$CREALITY_CFG.p3d-original"
+  sed -i '/"delay_image":{/,/}/ s/"switch":1/"switch":0/' "$CREALITY_CFG"
+  DELAY="$(sed -n '/"delay_image":{/,/}/p' "$CREALITY_CFG" | grep -o '"switch":[01]' | head -n1 | cut -d: -f2 || true)"
+  [ "$DELAY" = "0" ] || fail "Could not confirm Creality timelapse switch=0"
+  pass "Creality stock timelapse disabled"
+else
+  fail "$CREALITY_CFG missing"
+fi
+
+step "Moonraker Timelapse ffmpeg compatibility"
+if [ -x /opt/bin/ffmpeg ]; then
+  pass "/opt/bin/ffmpeg already available"
+elif [ -x /usr/bin/ffmpeg ]; then
+  mkdir -p /opt/bin
+  ln -sf /usr/bin/ffmpeg /opt/bin/ffmpeg
+  pass "Created /opt/bin/ffmpeg -> /usr/bin/ffmpeg"
+else
+  fail "No usable ffmpeg found"
+fi
+/opt/bin/ffmpeg -version >/dev/null 2>&1 || fail "ffmpeg execution failed"
+
+step "Timelapse cleanup"
+mkdir -p /usr/data/scripts
+cat > /usr/data/scripts/timelapse_cleanup.sh <<'CLEANEOF'
+#!/bin/sh
+HIGH=80
+LOW=75
+DIR1="/usr/data/printer_data/timelapse"
+DIR2="/usr/data/creality/userdata/delay_image/video"
+usage_percent() { df -P /usr/data | awk 'NR==2 {gsub("%","",$5); print $5}'; }
+USED="$(usage_percent)"
+[ -z "$USED" ] && exit 1
+[ "$USED" -lt "$HIGH" ] && exit 0
+while [ "$USED" -gt "$LOW" ]; do
+  OLDEST="$(find "$DIR1" "$DIR2" -type f 2>/dev/null | while read FILE; do MTIME="$(stat -c %Y "$FILE" 2>/dev/null)"; [ -n "$MTIME" ] && echo "$MTIME $FILE"; done | sort -n | head -n1 | cut -d' ' -f2-)"
+  [ -n "$OLDEST" ] || exit 0
+  rm -f "$OLDEST"
+  USED="$(usage_percent)"
+done
+CLEANEOF
+chmod +x /usr/data/scripts/timelapse_cleanup.sh
+pass "Cleanup policy installed (80% -> 75%)"
+
+mkdir -p /usr/data/cron
+CRON=/usr/data/cron/root
+touch "$CRON"
+grep -q '/usr/data/scripts/timelapse_cleanup.sh' "$CRON" || echo '0 * * * * /usr/data/scripts/timelapse_cleanup.sh >> /usr/data/scripts/timelapse_cleanup.log 2>&1' >> "$CRON"
+grep -q '/usr/data/scripts/p3d-k1/healthcheck.sh --quick' "$CRON" || echo '17 3 * * * /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1' >> "$CRON"
+chmod 600 "$CRON"
+
+cat > /etc/init.d/S98timelapse_cron <<'CRONEOF'
+#!/bin/sh
+CROND=/usr/sbin/crond
+CRONDIR=/usr/data/cron
+LOG=/usr/data/scripts/crond.log
+case "$1" in
+  start)
+    pidof crond >/dev/null 2>&1 && exit 0
+    "$CROND" -b -c "$CRONDIR" -L "$LOG"
+    ;;
+  stop) killall crond 2>/dev/null || true;;
+  restart) "$0" stop; sleep 1; "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CRONEOF
+chmod +x /etc/init.d/S98timelapse_cron
+/etc/init.d/S98timelapse_cron restart
+pass "Cron installed"
+
+step "Healthcheck boot hook"
+cat > /etc/init.d/S99z_p3d_healthcheck <<'BOOTEOF'
+#!/bin/sh
+case "$1" in
+  start)
+    ( sleep 25; /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1 ) &
+    ;;
+  stop) ;;
+  restart) "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+BOOTEOF
+chmod +x /etc/init.d/S99z_p3d_healthcheck
+pass "Automatic QUICK healthcheck enabled at boot"
+
+step "Restart Moonraker"
+if [ -x /etc/init.d/S56moonraker_service ]; then
+  set +e
+  /etc/init.d/S56moonraker_service restart >>"$LOG" 2>&1
+  RESTART_RC=$?
+  set -e
+  if [ "$RESTART_RC" -eq 0 ]; then
+    pass "Moonraker restart command accepted"
+  else
+    say "[WARN] Moonraker init-script returned rc=$RESTART_RC; API readiness is authoritative"
+  fi
+else
+  say "[WARN] Moonraker init-script missing; API readiness is authoritative"
+fi
+
+step "Wait for Moonraker API readiness"
+MOONRAKER_READY=0
+MOONRAKER_WAITED=0
+MOONRAKER_TIMEOUT=45
+while [ "$MOONRAKER_WAITED" -lt "$MOONRAKER_TIMEOUT" ]; do
+  if wget -q -T 3 -O /tmp/p3d_moonraker_ready.json 'http://127.0.0.1:7125/server/info' 2>/dev/null; then
+    MOONRAKER_READY=1
+    break
+  fi
+  sleep 2
+  MOONRAKER_WAITED=$((MOONRAKER_WAITED + 2))
+done
+
+if [ "$MOONRAKER_READY" -eq 1 ]; then
+  pass "Moonraker API ready after ${MOONRAKER_WAITED}s"
+else
+  fail "Moonraker API did not become ready within ${MOONRAKER_TIMEOUT}s"
+fi
+
+step "Fluidd provisioning"
+PROVISION="$P3D_DIR/fluidd_provision.py"
+[ -f "$PROVISION" ] || fail "$PROVISION is missing. Install the complete P3D deployment package."
+
+PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON="$(command -v python3 2>/dev/null || true)"
+fi
+[ -n "$PYTHON" ] && [ -x "$PYTHON" ] || fail "Python 3 runtime not found for Fluidd provisioning"
+
+set +e
+PROVISION_OUTPUT="$("$PYTHON" "$PROVISION" 2>&1)"
+PROVISION_RC=$?
+set -e
+[ -n "$PROVISION_OUTPUT" ] && say "$PROVISION_OUTPUT"
+
+case "$PROVISION_RC" in
+  0) pass "Fluidd provisioning completed" ;;
+  1) say "[WARN] Fluidd provisioning preserved custom user state; FULL healthcheck will report WARN" ;;
+  *) fail "Fluidd provisioning failed (rc=$PROVISION_RC)" ;;
+esac
+
+[ -x "$P3D_DIR/healthcheck.sh" ] || fail "$P3D_DIR/healthcheck.sh is missing. Copy the complete P3D deployment package before running deploy.sh."
+
+step "FULL post-deploy gate"
+set +e
+"$P3D_DIR/healthcheck.sh" --full
+rc=$?
+set -e
+
+case "$rc" in
+  0)
+    pass "FULL healthcheck passed"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: PASS"
+    say "========================================"
+    exit 0
+    ;;
+  1)
+    say "[WARN] FULL healthcheck completed with warnings"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: WARN"
+    say " Review warnings before production use."
+    say "========================================"
+    exit 1
+    ;;
+  *)
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: FAIL (healthcheck rc=$rc)"
+    say "========================================"
+    exit "$rc"
+    ;;
+esac
+, section)
+    if not pin_line:
+        raise SystemExit("K1 Max heater_fans pins line not found")
+    pins = [p.strip() for p in pin_line.group(1).split(",")]
+    if "PB2" not in pins:
+        raise SystemExit("PB2 is not present in stock heater_fans mapping; refusing unknown layout")
+    pins = [p for p in pins if p != "PB2"]
+    if not pins:
+        raise SystemExit("heater_fans would become empty")
+    new_section = section[:pin_line.start(1)] + ",".join(pins) + section[pin_line.end(1):]
+    text = text[:m.start()] + new_section + text[m.end():]
+    if not text.endswith("\n"):
+        text += "\n"
+    text += "\n" + fixed
+
+backup = path.with_name("printer.cfg.p3d-pre-cf0502-fix")
+if not backup.exists():
+    backup.write_text(path.read_text())
+path.write_text(text)
+PYEOF
+
+  grep -q '^\[output_pin board_fan\]CAMERA_OK=0
+rm -f /tmp/p3d_snapshot.jpg
+if wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' 2>/dev/null; then
+  SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+  [ "$SIZE" -gt 1000 ] && CAMERA_OK=1
+fi
+
+if [ "$CAMERA_OK" -eq 0 ]; then
+  [ -x /usr/bin/mjpg_streamer ] || fail "Camera snapshot unavailable and /usr/bin/mjpg_streamer missing"
+  [ -d /usr/lib/mjpg-streamer ] || fail "Camera snapshot unavailable and /usr/lib/mjpg-streamer missing"
+  cat > /etc/init.d/S99mjpg_camera <<'CAMERAEOF'
+#!/bin/sh
+PIDFILE=/var/run/main-video-4_mjpg.pid
+MJPG=/usr/bin/mjpg_streamer
+LIB=/usr/lib/mjpg-streamer
+case "$1" in
+  start)
+    pidof mjpg_streamer >/dev/null 2>&1 && exit 0
+    LD_LIBRARY_PATH="$LIB" start-stop-daemon -S -b -m -p "$PIDFILE" --exec "$MJPG" -- \
+      -i "input_memfd.so -t 0" \
+      -o "output_http.so -w /usr/share/mjpg-streamer/www/ -p 8080"
+    ;;
+  stop)
+    start-stop-daemon -K -p "$PIDFILE" 2>/dev/null || true
+    rm -f "$PIDFILE"
+    ;;
+  restart|reload)
+    "$0" stop; sleep 1; "$0" start
+    ;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CAMERAEOF
+  chmod +x /etc/init.d/S99mjpg_camera
+  /etc/init.d/S99mjpg_camera restart
+  sleep 2
+fi
+
+rm -f /tmp/p3d_snapshot.jpg
+wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' || fail "Camera snapshot test failed"
+SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+[ "$SIZE" -gt 1000 ] || fail "Camera snapshot invalid ($SIZE bytes)"
+pass "Camera snapshot OK ($SIZE bytes)"
+
+step "Stock Creality timelapse OFF"
+CREALITY_CFG="/usr/data/creality/userdata/config/user_print_refer.json"
+if [ -f "$CREALITY_CFG" ]; then
+  [ -f "$CREALITY_CFG.p3d-original" ] || cp -p "$CREALITY_CFG" "$CREALITY_CFG.p3d-original"
+  sed -i '/"delay_image":{/,/}/ s/"switch":1/"switch":0/' "$CREALITY_CFG"
+  DELAY="$(sed -n '/"delay_image":{/,/}/p' "$CREALITY_CFG" | grep -o '"switch":[01]' | head -n1 | cut -d: -f2 || true)"
+  [ "$DELAY" = "0" ] || fail "Could not confirm Creality timelapse switch=0"
+  pass "Creality stock timelapse disabled"
+else
+  fail "$CREALITY_CFG missing"
+fi
+
+step "Moonraker Timelapse ffmpeg compatibility"
+if [ -x /opt/bin/ffmpeg ]; then
+  pass "/opt/bin/ffmpeg already available"
+elif [ -x /usr/bin/ffmpeg ]; then
+  mkdir -p /opt/bin
+  ln -sf /usr/bin/ffmpeg /opt/bin/ffmpeg
+  pass "Created /opt/bin/ffmpeg -> /usr/bin/ffmpeg"
+else
+  fail "No usable ffmpeg found"
+fi
+/opt/bin/ffmpeg -version >/dev/null 2>&1 || fail "ffmpeg execution failed"
+
+step "Timelapse cleanup"
+mkdir -p /usr/data/scripts
+cat > /usr/data/scripts/timelapse_cleanup.sh <<'CLEANEOF'
+#!/bin/sh
+HIGH=80
+LOW=75
+DIR1="/usr/data/printer_data/timelapse"
+DIR2="/usr/data/creality/userdata/delay_image/video"
+usage_percent() { df -P /usr/data | awk 'NR==2 {gsub("%","",$5); print $5}'; }
+USED="$(usage_percent)"
+[ -z "$USED" ] && exit 1
+[ "$USED" -lt "$HIGH" ] && exit 0
+while [ "$USED" -gt "$LOW" ]; do
+  OLDEST="$(find "$DIR1" "$DIR2" -type f 2>/dev/null | while read FILE; do MTIME="$(stat -c %Y "$FILE" 2>/dev/null)"; [ -n "$MTIME" ] && echo "$MTIME $FILE"; done | sort -n | head -n1 | cut -d' ' -f2-)"
+  [ -n "$OLDEST" ] || exit 0
+  rm -f "$OLDEST"
+  USED="$(usage_percent)"
+done
+CLEANEOF
+chmod +x /usr/data/scripts/timelapse_cleanup.sh
+pass "Cleanup policy installed (80% -> 75%)"
+
+mkdir -p /usr/data/cron
+CRON=/usr/data/cron/root
+touch "$CRON"
+grep -q '/usr/data/scripts/timelapse_cleanup.sh' "$CRON" || echo '0 * * * * /usr/data/scripts/timelapse_cleanup.sh >> /usr/data/scripts/timelapse_cleanup.log 2>&1' >> "$CRON"
+grep -q '/usr/data/scripts/p3d-k1/healthcheck.sh --quick' "$CRON" || echo '17 3 * * * /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1' >> "$CRON"
+chmod 600 "$CRON"
+
+cat > /etc/init.d/S98timelapse_cron <<'CRONEOF'
+#!/bin/sh
+CROND=/usr/sbin/crond
+CRONDIR=/usr/data/cron
+LOG=/usr/data/scripts/crond.log
+case "$1" in
+  start)
+    pidof crond >/dev/null 2>&1 && exit 0
+    "$CROND" -b -c "$CRONDIR" -L "$LOG"
+    ;;
+  stop) killall crond 2>/dev/null || true;;
+  restart) "$0" stop; sleep 1; "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CRONEOF
+chmod +x /etc/init.d/S98timelapse_cron
+/etc/init.d/S98timelapse_cron restart
+pass "Cron installed"
+
+step "Healthcheck boot hook"
+cat > /etc/init.d/S99z_p3d_healthcheck <<'BOOTEOF'
+#!/bin/sh
+case "$1" in
+  start)
+    ( sleep 25; /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1 ) &
+    ;;
+  stop) ;;
+  restart) "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+BOOTEOF
+chmod +x /etc/init.d/S99z_p3d_healthcheck
+pass "Automatic QUICK healthcheck enabled at boot"
+
+step "Restart Moonraker"
+if [ -x /etc/init.d/S56moonraker_service ]; then
+  set +e
+  /etc/init.d/S56moonraker_service restart >>"$LOG" 2>&1
+  RESTART_RC=$?
+  set -e
+  if [ "$RESTART_RC" -eq 0 ]; then
+    pass "Moonraker restart command accepted"
+  else
+    say "[WARN] Moonraker init-script returned rc=$RESTART_RC; API readiness is authoritative"
+  fi
+else
+  say "[WARN] Moonraker init-script missing; API readiness is authoritative"
+fi
+
+step "Wait for Moonraker API readiness"
+MOONRAKER_READY=0
+MOONRAKER_WAITED=0
+MOONRAKER_TIMEOUT=45
+while [ "$MOONRAKER_WAITED" -lt "$MOONRAKER_TIMEOUT" ]; do
+  if wget -q -T 3 -O /tmp/p3d_moonraker_ready.json 'http://127.0.0.1:7125/server/info' 2>/dev/null; then
+    MOONRAKER_READY=1
+    break
+  fi
+  sleep 2
+  MOONRAKER_WAITED=$((MOONRAKER_WAITED + 2))
+done
+
+if [ "$MOONRAKER_READY" -eq 1 ]; then
+  pass "Moonraker API ready after ${MOONRAKER_WAITED}s"
+else
+  fail "Moonraker API did not become ready within ${MOONRAKER_TIMEOUT}s"
+fi
+
+step "Fluidd provisioning"
+PROVISION="$P3D_DIR/fluidd_provision.py"
+[ -f "$PROVISION" ] || fail "$PROVISION is missing. Install the complete P3D deployment package."
+
+PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON="$(command -v python3 2>/dev/null || true)"
+fi
+[ -n "$PYTHON" ] && [ -x "$PYTHON" ] || fail "Python 3 runtime not found for Fluidd provisioning"
+
+set +e
+PROVISION_OUTPUT="$("$PYTHON" "$PROVISION" 2>&1)"
+PROVISION_RC=$?
+set -e
+[ -n "$PROVISION_OUTPUT" ] && say "$PROVISION_OUTPUT"
+
+case "$PROVISION_RC" in
+  0) pass "Fluidd provisioning completed" ;;
+  1) say "[WARN] Fluidd provisioning preserved custom user state; FULL healthcheck will report WARN" ;;
+  *) fail "Fluidd provisioning failed (rc=$PROVISION_RC)" ;;
+esac
+
+[ -x "$P3D_DIR/healthcheck.sh" ] || fail "$P3D_DIR/healthcheck.sh is missing. Copy the complete P3D deployment package before running deploy.sh."
+
+step "FULL post-deploy gate"
+set +e
+"$P3D_DIR/healthcheck.sh" --full
+rc=$?
+set -e
+
+case "$rc" in
+  0)
+    pass "FULL healthcheck passed"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: PASS"
+    say "========================================"
+    exit 0
+    ;;
+  1)
+    say "[WARN] FULL healthcheck completed with warnings"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: WARN"
+    say " Review warnings before production use."
+    say "========================================"
+    exit 1
+    ;;
+  *)
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: FAIL (healthcheck rc=$rc)"
+    say "========================================"
+    exit "$rc"
+    ;;
+esac
+ "$PRINTER_CFG" || fail "K1 Max board_fan output_pin not installed"
+  grep -q '^\[delayed_gcode P3D_BOARD_FAN_CONTROL\]CAMERA_OK=0
+rm -f /tmp/p3d_snapshot.jpg
+if wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' 2>/dev/null; then
+  SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+  [ "$SIZE" -gt 1000 ] && CAMERA_OK=1
+fi
+
+if [ "$CAMERA_OK" -eq 0 ]; then
+  [ -x /usr/bin/mjpg_streamer ] || fail "Camera snapshot unavailable and /usr/bin/mjpg_streamer missing"
+  [ -d /usr/lib/mjpg-streamer ] || fail "Camera snapshot unavailable and /usr/lib/mjpg-streamer missing"
+  cat > /etc/init.d/S99mjpg_camera <<'CAMERAEOF'
+#!/bin/sh
+PIDFILE=/var/run/main-video-4_mjpg.pid
+MJPG=/usr/bin/mjpg_streamer
+LIB=/usr/lib/mjpg-streamer
+case "$1" in
+  start)
+    pidof mjpg_streamer >/dev/null 2>&1 && exit 0
+    LD_LIBRARY_PATH="$LIB" start-stop-daemon -S -b -m -p "$PIDFILE" --exec "$MJPG" -- \
+      -i "input_memfd.so -t 0" \
+      -o "output_http.so -w /usr/share/mjpg-streamer/www/ -p 8080"
+    ;;
+  stop)
+    start-stop-daemon -K -p "$PIDFILE" 2>/dev/null || true
+    rm -f "$PIDFILE"
+    ;;
+  restart|reload)
+    "$0" stop; sleep 1; "$0" start
+    ;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CAMERAEOF
+  chmod +x /etc/init.d/S99mjpg_camera
+  /etc/init.d/S99mjpg_camera restart
+  sleep 2
+fi
+
+rm -f /tmp/p3d_snapshot.jpg
+wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' || fail "Camera snapshot test failed"
+SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+[ "$SIZE" -gt 1000 ] || fail "Camera snapshot invalid ($SIZE bytes)"
+pass "Camera snapshot OK ($SIZE bytes)"
+
+step "Stock Creality timelapse OFF"
+CREALITY_CFG="/usr/data/creality/userdata/config/user_print_refer.json"
+if [ -f "$CREALITY_CFG" ]; then
+  [ -f "$CREALITY_CFG.p3d-original" ] || cp -p "$CREALITY_CFG" "$CREALITY_CFG.p3d-original"
+  sed -i '/"delay_image":{/,/}/ s/"switch":1/"switch":0/' "$CREALITY_CFG"
+  DELAY="$(sed -n '/"delay_image":{/,/}/p' "$CREALITY_CFG" | grep -o '"switch":[01]' | head -n1 | cut -d: -f2 || true)"
+  [ "$DELAY" = "0" ] || fail "Could not confirm Creality timelapse switch=0"
+  pass "Creality stock timelapse disabled"
+else
+  fail "$CREALITY_CFG missing"
+fi
+
+step "Moonraker Timelapse ffmpeg compatibility"
+if [ -x /opt/bin/ffmpeg ]; then
+  pass "/opt/bin/ffmpeg already available"
+elif [ -x /usr/bin/ffmpeg ]; then
+  mkdir -p /opt/bin
+  ln -sf /usr/bin/ffmpeg /opt/bin/ffmpeg
+  pass "Created /opt/bin/ffmpeg -> /usr/bin/ffmpeg"
+else
+  fail "No usable ffmpeg found"
+fi
+/opt/bin/ffmpeg -version >/dev/null 2>&1 || fail "ffmpeg execution failed"
+
+step "Timelapse cleanup"
+mkdir -p /usr/data/scripts
+cat > /usr/data/scripts/timelapse_cleanup.sh <<'CLEANEOF'
+#!/bin/sh
+HIGH=80
+LOW=75
+DIR1="/usr/data/printer_data/timelapse"
+DIR2="/usr/data/creality/userdata/delay_image/video"
+usage_percent() { df -P /usr/data | awk 'NR==2 {gsub("%","",$5); print $5}'; }
+USED="$(usage_percent)"
+[ -z "$USED" ] && exit 1
+[ "$USED" -lt "$HIGH" ] && exit 0
+while [ "$USED" -gt "$LOW" ]; do
+  OLDEST="$(find "$DIR1" "$DIR2" -type f 2>/dev/null | while read FILE; do MTIME="$(stat -c %Y "$FILE" 2>/dev/null)"; [ -n "$MTIME" ] && echo "$MTIME $FILE"; done | sort -n | head -n1 | cut -d' ' -f2-)"
+  [ -n "$OLDEST" ] || exit 0
+  rm -f "$OLDEST"
+  USED="$(usage_percent)"
+done
+CLEANEOF
+chmod +x /usr/data/scripts/timelapse_cleanup.sh
+pass "Cleanup policy installed (80% -> 75%)"
+
+mkdir -p /usr/data/cron
+CRON=/usr/data/cron/root
+touch "$CRON"
+grep -q '/usr/data/scripts/timelapse_cleanup.sh' "$CRON" || echo '0 * * * * /usr/data/scripts/timelapse_cleanup.sh >> /usr/data/scripts/timelapse_cleanup.log 2>&1' >> "$CRON"
+grep -q '/usr/data/scripts/p3d-k1/healthcheck.sh --quick' "$CRON" || echo '17 3 * * * /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1' >> "$CRON"
+chmod 600 "$CRON"
+
+cat > /etc/init.d/S98timelapse_cron <<'CRONEOF'
+#!/bin/sh
+CROND=/usr/sbin/crond
+CRONDIR=/usr/data/cron
+LOG=/usr/data/scripts/crond.log
+case "$1" in
+  start)
+    pidof crond >/dev/null 2>&1 && exit 0
+    "$CROND" -b -c "$CRONDIR" -L "$LOG"
+    ;;
+  stop) killall crond 2>/dev/null || true;;
+  restart) "$0" stop; sleep 1; "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CRONEOF
+chmod +x /etc/init.d/S98timelapse_cron
+/etc/init.d/S98timelapse_cron restart
+pass "Cron installed"
+
+step "Healthcheck boot hook"
+cat > /etc/init.d/S99z_p3d_healthcheck <<'BOOTEOF'
+#!/bin/sh
+case "$1" in
+  start)
+    ( sleep 25; /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1 ) &
+    ;;
+  stop) ;;
+  restart) "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+BOOTEOF
+chmod +x /etc/init.d/S99z_p3d_healthcheck
+pass "Automatic QUICK healthcheck enabled at boot"
+
+step "Restart Moonraker"
+if [ -x /etc/init.d/S56moonraker_service ]; then
+  set +e
+  /etc/init.d/S56moonraker_service restart >>"$LOG" 2>&1
+  RESTART_RC=$?
+  set -e
+  if [ "$RESTART_RC" -eq 0 ]; then
+    pass "Moonraker restart command accepted"
+  else
+    say "[WARN] Moonraker init-script returned rc=$RESTART_RC; API readiness is authoritative"
+  fi
+else
+  say "[WARN] Moonraker init-script missing; API readiness is authoritative"
+fi
+
+step "Wait for Moonraker API readiness"
+MOONRAKER_READY=0
+MOONRAKER_WAITED=0
+MOONRAKER_TIMEOUT=45
+while [ "$MOONRAKER_WAITED" -lt "$MOONRAKER_TIMEOUT" ]; do
+  if wget -q -T 3 -O /tmp/p3d_moonraker_ready.json 'http://127.0.0.1:7125/server/info' 2>/dev/null; then
+    MOONRAKER_READY=1
+    break
+  fi
+  sleep 2
+  MOONRAKER_WAITED=$((MOONRAKER_WAITED + 2))
+done
+
+if [ "$MOONRAKER_READY" -eq 1 ]; then
+  pass "Moonraker API ready after ${MOONRAKER_WAITED}s"
+else
+  fail "Moonraker API did not become ready within ${MOONRAKER_TIMEOUT}s"
+fi
+
+step "Fluidd provisioning"
+PROVISION="$P3D_DIR/fluidd_provision.py"
+[ -f "$PROVISION" ] || fail "$PROVISION is missing. Install the complete P3D deployment package."
+
+PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON="$(command -v python3 2>/dev/null || true)"
+fi
+[ -n "$PYTHON" ] && [ -x "$PYTHON" ] || fail "Python 3 runtime not found for Fluidd provisioning"
+
+set +e
+PROVISION_OUTPUT="$("$PYTHON" "$PROVISION" 2>&1)"
+PROVISION_RC=$?
+set -e
+[ -n "$PROVISION_OUTPUT" ] && say "$PROVISION_OUTPUT"
+
+case "$PROVISION_RC" in
+  0) pass "Fluidd provisioning completed" ;;
+  1) say "[WARN] Fluidd provisioning preserved custom user state; FULL healthcheck will report WARN" ;;
+  *) fail "Fluidd provisioning failed (rc=$PROVISION_RC)" ;;
+esac
+
+[ -x "$P3D_DIR/healthcheck.sh" ] || fail "$P3D_DIR/healthcheck.sh is missing. Copy the complete P3D deployment package before running deploy.sh."
+
+step "FULL post-deploy gate"
+set +e
+"$P3D_DIR/healthcheck.sh" --full
+rc=$?
+set -e
+
+case "$rc" in
+  0)
+    pass "FULL healthcheck passed"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: PASS"
+    say "========================================"
+    exit 0
+    ;;
+  1)
+    say "[WARN] FULL healthcheck completed with warnings"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: WARN"
+    say " Review warnings before production use."
+    say "========================================"
+    exit 1
+    ;;
+  *)
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: FAIL (healthcheck rc=$rc)"
+    say "========================================"
+    exit "$rc"
+    ;;
+esac
+ "$PRINTER_CFG" || fail "K1 Max board-fan controller not installed"
+  grep -q '^value:[[:space:]]*0\.50CAMERA_OK=0
+rm -f /tmp/p3d_snapshot.jpg
+if wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' 2>/dev/null; then
+  SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+  [ "$SIZE" -gt 1000 ] && CAMERA_OK=1
+fi
+
+if [ "$CAMERA_OK" -eq 0 ]; then
+  [ -x /usr/bin/mjpg_streamer ] || fail "Camera snapshot unavailable and /usr/bin/mjpg_streamer missing"
+  [ -d /usr/lib/mjpg-streamer ] || fail "Camera snapshot unavailable and /usr/lib/mjpg-streamer missing"
+  cat > /etc/init.d/S99mjpg_camera <<'CAMERAEOF'
+#!/bin/sh
+PIDFILE=/var/run/main-video-4_mjpg.pid
+MJPG=/usr/bin/mjpg_streamer
+LIB=/usr/lib/mjpg-streamer
+case "$1" in
+  start)
+    pidof mjpg_streamer >/dev/null 2>&1 && exit 0
+    LD_LIBRARY_PATH="$LIB" start-stop-daemon -S -b -m -p "$PIDFILE" --exec "$MJPG" -- \
+      -i "input_memfd.so -t 0" \
+      -o "output_http.so -w /usr/share/mjpg-streamer/www/ -p 8080"
+    ;;
+  stop)
+    start-stop-daemon -K -p "$PIDFILE" 2>/dev/null || true
+    rm -f "$PIDFILE"
+    ;;
+  restart|reload)
+    "$0" stop; sleep 1; "$0" start
+    ;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CAMERAEOF
+  chmod +x /etc/init.d/S99mjpg_camera
+  /etc/init.d/S99mjpg_camera restart
+  sleep 2
+fi
+
+rm -f /tmp/p3d_snapshot.jpg
+wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' || fail "Camera snapshot test failed"
+SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+[ "$SIZE" -gt 1000 ] || fail "Camera snapshot invalid ($SIZE bytes)"
+pass "Camera snapshot OK ($SIZE bytes)"
+
+step "Stock Creality timelapse OFF"
+CREALITY_CFG="/usr/data/creality/userdata/config/user_print_refer.json"
+if [ -f "$CREALITY_CFG" ]; then
+  [ -f "$CREALITY_CFG.p3d-original" ] || cp -p "$CREALITY_CFG" "$CREALITY_CFG.p3d-original"
+  sed -i '/"delay_image":{/,/}/ s/"switch":1/"switch":0/' "$CREALITY_CFG"
+  DELAY="$(sed -n '/"delay_image":{/,/}/p' "$CREALITY_CFG" | grep -o '"switch":[01]' | head -n1 | cut -d: -f2 || true)"
+  [ "$DELAY" = "0" ] || fail "Could not confirm Creality timelapse switch=0"
+  pass "Creality stock timelapse disabled"
+else
+  fail "$CREALITY_CFG missing"
+fi
+
+step "Moonraker Timelapse ffmpeg compatibility"
+if [ -x /opt/bin/ffmpeg ]; then
+  pass "/opt/bin/ffmpeg already available"
+elif [ -x /usr/bin/ffmpeg ]; then
+  mkdir -p /opt/bin
+  ln -sf /usr/bin/ffmpeg /opt/bin/ffmpeg
+  pass "Created /opt/bin/ffmpeg -> /usr/bin/ffmpeg"
+else
+  fail "No usable ffmpeg found"
+fi
+/opt/bin/ffmpeg -version >/dev/null 2>&1 || fail "ffmpeg execution failed"
+
+step "Timelapse cleanup"
+mkdir -p /usr/data/scripts
+cat > /usr/data/scripts/timelapse_cleanup.sh <<'CLEANEOF'
+#!/bin/sh
+HIGH=80
+LOW=75
+DIR1="/usr/data/printer_data/timelapse"
+DIR2="/usr/data/creality/userdata/delay_image/video"
+usage_percent() { df -P /usr/data | awk 'NR==2 {gsub("%","",$5); print $5}'; }
+USED="$(usage_percent)"
+[ -z "$USED" ] && exit 1
+[ "$USED" -lt "$HIGH" ] && exit 0
+while [ "$USED" -gt "$LOW" ]; do
+  OLDEST="$(find "$DIR1" "$DIR2" -type f 2>/dev/null | while read FILE; do MTIME="$(stat -c %Y "$FILE" 2>/dev/null)"; [ -n "$MTIME" ] && echo "$MTIME $FILE"; done | sort -n | head -n1 | cut -d' ' -f2-)"
+  [ -n "$OLDEST" ] || exit 0
+  rm -f "$OLDEST"
+  USED="$(usage_percent)"
+done
+CLEANEOF
+chmod +x /usr/data/scripts/timelapse_cleanup.sh
+pass "Cleanup policy installed (80% -> 75%)"
+
+mkdir -p /usr/data/cron
+CRON=/usr/data/cron/root
+touch "$CRON"
+grep -q '/usr/data/scripts/timelapse_cleanup.sh' "$CRON" || echo '0 * * * * /usr/data/scripts/timelapse_cleanup.sh >> /usr/data/scripts/timelapse_cleanup.log 2>&1' >> "$CRON"
+grep -q '/usr/data/scripts/p3d-k1/healthcheck.sh --quick' "$CRON" || echo '17 3 * * * /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1' >> "$CRON"
+chmod 600 "$CRON"
+
+cat > /etc/init.d/S98timelapse_cron <<'CRONEOF'
+#!/bin/sh
+CROND=/usr/sbin/crond
+CRONDIR=/usr/data/cron
+LOG=/usr/data/scripts/crond.log
+case "$1" in
+  start)
+    pidof crond >/dev/null 2>&1 && exit 0
+    "$CROND" -b -c "$CRONDIR" -L "$LOG"
+    ;;
+  stop) killall crond 2>/dev/null || true;;
+  restart) "$0" stop; sleep 1; "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CRONEOF
+chmod +x /etc/init.d/S98timelapse_cron
+/etc/init.d/S98timelapse_cron restart
+pass "Cron installed"
+
+step "Healthcheck boot hook"
+cat > /etc/init.d/S99z_p3d_healthcheck <<'BOOTEOF'
+#!/bin/sh
+case "$1" in
+  start)
+    ( sleep 25; /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1 ) &
+    ;;
+  stop) ;;
+  restart) "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+BOOTEOF
+chmod +x /etc/init.d/S99z_p3d_healthcheck
+pass "Automatic QUICK healthcheck enabled at boot"
+
+step "Restart Moonraker"
+if [ -x /etc/init.d/S56moonraker_service ]; then
+  set +e
+  /etc/init.d/S56moonraker_service restart >>"$LOG" 2>&1
+  RESTART_RC=$?
+  set -e
+  if [ "$RESTART_RC" -eq 0 ]; then
+    pass "Moonraker restart command accepted"
+  else
+    say "[WARN] Moonraker init-script returned rc=$RESTART_RC; API readiness is authoritative"
+  fi
+else
+  say "[WARN] Moonraker init-script missing; API readiness is authoritative"
+fi
+
+step "Wait for Moonraker API readiness"
+MOONRAKER_READY=0
+MOONRAKER_WAITED=0
+MOONRAKER_TIMEOUT=45
+while [ "$MOONRAKER_WAITED" -lt "$MOONRAKER_TIMEOUT" ]; do
+  if wget -q -T 3 -O /tmp/p3d_moonraker_ready.json 'http://127.0.0.1:7125/server/info' 2>/dev/null; then
+    MOONRAKER_READY=1
+    break
+  fi
+  sleep 2
+  MOONRAKER_WAITED=$((MOONRAKER_WAITED + 2))
+done
+
+if [ "$MOONRAKER_READY" -eq 1 ]; then
+  pass "Moonraker API ready after ${MOONRAKER_WAITED}s"
+else
+  fail "Moonraker API did not become ready within ${MOONRAKER_TIMEOUT}s"
+fi
+
+step "Fluidd provisioning"
+PROVISION="$P3D_DIR/fluidd_provision.py"
+[ -f "$PROVISION" ] || fail "$PROVISION is missing. Install the complete P3D deployment package."
+
+PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON="$(command -v python3 2>/dev/null || true)"
+fi
+[ -n "$PYTHON" ] && [ -x "$PYTHON" ] || fail "Python 3 runtime not found for Fluidd provisioning"
+
+set +e
+PROVISION_OUTPUT="$("$PYTHON" "$PROVISION" 2>&1)"
+PROVISION_RC=$?
+set -e
+[ -n "$PROVISION_OUTPUT" ] && say "$PROVISION_OUTPUT"
+
+case "$PROVISION_RC" in
+  0) pass "Fluidd provisioning completed" ;;
+  1) say "[WARN] Fluidd provisioning preserved custom user state; FULL healthcheck will report WARN" ;;
+  *) fail "Fluidd provisioning failed (rc=$PROVISION_RC)" ;;
+esac
+
+[ -x "$P3D_DIR/healthcheck.sh" ] || fail "$P3D_DIR/healthcheck.sh is missing. Copy the complete P3D deployment package before running deploy.sh."
+
+step "FULL post-deploy gate"
+set +e
+"$P3D_DIR/healthcheck.sh" --full
+rc=$?
+set -e
+
+case "$rc" in
+  0)
+    pass "FULL healthcheck passed"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: PASS"
+    say "========================================"
+    exit 0
+    ;;
+  1)
+    say "[WARN] FULL healthcheck completed with warnings"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: WARN"
+    say " Review warnings before production use."
+    say "========================================"
+    exit 1
+    ;;
+  *)
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: FAIL (healthcheck rc=$rc)"
+    say "========================================"
+    exit "$rc"
+    ;;
+esac
+ "$PRINTER_CFG" || fail "K1 Max board-fan idle floor is not 50%"
+  grep -q '^shutdown_value:[[:space:]]*1\.0CAMERA_OK=0
+rm -f /tmp/p3d_snapshot.jpg
+if wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' 2>/dev/null; then
+  SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+  [ "$SIZE" -gt 1000 ] && CAMERA_OK=1
+fi
+
+if [ "$CAMERA_OK" -eq 0 ]; then
+  [ -x /usr/bin/mjpg_streamer ] || fail "Camera snapshot unavailable and /usr/bin/mjpg_streamer missing"
+  [ -d /usr/lib/mjpg-streamer ] || fail "Camera snapshot unavailable and /usr/lib/mjpg-streamer missing"
+  cat > /etc/init.d/S99mjpg_camera <<'CAMERAEOF'
+#!/bin/sh
+PIDFILE=/var/run/main-video-4_mjpg.pid
+MJPG=/usr/bin/mjpg_streamer
+LIB=/usr/lib/mjpg-streamer
+case "$1" in
+  start)
+    pidof mjpg_streamer >/dev/null 2>&1 && exit 0
+    LD_LIBRARY_PATH="$LIB" start-stop-daemon -S -b -m -p "$PIDFILE" --exec "$MJPG" -- \
+      -i "input_memfd.so -t 0" \
+      -o "output_http.so -w /usr/share/mjpg-streamer/www/ -p 8080"
+    ;;
+  stop)
+    start-stop-daemon -K -p "$PIDFILE" 2>/dev/null || true
+    rm -f "$PIDFILE"
+    ;;
+  restart|reload)
+    "$0" stop; sleep 1; "$0" start
+    ;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CAMERAEOF
+  chmod +x /etc/init.d/S99mjpg_camera
+  /etc/init.d/S99mjpg_camera restart
+  sleep 2
+fi
+
+rm -f /tmp/p3d_snapshot.jpg
+wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' || fail "Camera snapshot test failed"
+SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+[ "$SIZE" -gt 1000 ] || fail "Camera snapshot invalid ($SIZE bytes)"
+pass "Camera snapshot OK ($SIZE bytes)"
+
+step "Stock Creality timelapse OFF"
+CREALITY_CFG="/usr/data/creality/userdata/config/user_print_refer.json"
+if [ -f "$CREALITY_CFG" ]; then
+  [ -f "$CREALITY_CFG.p3d-original" ] || cp -p "$CREALITY_CFG" "$CREALITY_CFG.p3d-original"
+  sed -i '/"delay_image":{/,/}/ s/"switch":1/"switch":0/' "$CREALITY_CFG"
+  DELAY="$(sed -n '/"delay_image":{/,/}/p' "$CREALITY_CFG" | grep -o '"switch":[01]' | head -n1 | cut -d: -f2 || true)"
+  [ "$DELAY" = "0" ] || fail "Could not confirm Creality timelapse switch=0"
+  pass "Creality stock timelapse disabled"
+else
+  fail "$CREALITY_CFG missing"
+fi
+
+step "Moonraker Timelapse ffmpeg compatibility"
+if [ -x /opt/bin/ffmpeg ]; then
+  pass "/opt/bin/ffmpeg already available"
+elif [ -x /usr/bin/ffmpeg ]; then
+  mkdir -p /opt/bin
+  ln -sf /usr/bin/ffmpeg /opt/bin/ffmpeg
+  pass "Created /opt/bin/ffmpeg -> /usr/bin/ffmpeg"
+else
+  fail "No usable ffmpeg found"
+fi
+/opt/bin/ffmpeg -version >/dev/null 2>&1 || fail "ffmpeg execution failed"
+
+step "Timelapse cleanup"
+mkdir -p /usr/data/scripts
+cat > /usr/data/scripts/timelapse_cleanup.sh <<'CLEANEOF'
+#!/bin/sh
+HIGH=80
+LOW=75
+DIR1="/usr/data/printer_data/timelapse"
+DIR2="/usr/data/creality/userdata/delay_image/video"
+usage_percent() { df -P /usr/data | awk 'NR==2 {gsub("%","",$5); print $5}'; }
+USED="$(usage_percent)"
+[ -z "$USED" ] && exit 1
+[ "$USED" -lt "$HIGH" ] && exit 0
+while [ "$USED" -gt "$LOW" ]; do
+  OLDEST="$(find "$DIR1" "$DIR2" -type f 2>/dev/null | while read FILE; do MTIME="$(stat -c %Y "$FILE" 2>/dev/null)"; [ -n "$MTIME" ] && echo "$MTIME $FILE"; done | sort -n | head -n1 | cut -d' ' -f2-)"
+  [ -n "$OLDEST" ] || exit 0
+  rm -f "$OLDEST"
+  USED="$(usage_percent)"
+done
+CLEANEOF
+chmod +x /usr/data/scripts/timelapse_cleanup.sh
+pass "Cleanup policy installed (80% -> 75%)"
+
+mkdir -p /usr/data/cron
+CRON=/usr/data/cron/root
+touch "$CRON"
+grep -q '/usr/data/scripts/timelapse_cleanup.sh' "$CRON" || echo '0 * * * * /usr/data/scripts/timelapse_cleanup.sh >> /usr/data/scripts/timelapse_cleanup.log 2>&1' >> "$CRON"
+grep -q '/usr/data/scripts/p3d-k1/healthcheck.sh --quick' "$CRON" || echo '17 3 * * * /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1' >> "$CRON"
+chmod 600 "$CRON"
+
+cat > /etc/init.d/S98timelapse_cron <<'CRONEOF'
+#!/bin/sh
+CROND=/usr/sbin/crond
+CRONDIR=/usr/data/cron
+LOG=/usr/data/scripts/crond.log
+case "$1" in
+  start)
+    pidof crond >/dev/null 2>&1 && exit 0
+    "$CROND" -b -c "$CRONDIR" -L "$LOG"
+    ;;
+  stop) killall crond 2>/dev/null || true;;
+  restart) "$0" stop; sleep 1; "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CRONEOF
+chmod +x /etc/init.d/S98timelapse_cron
+/etc/init.d/S98timelapse_cron restart
+pass "Cron installed"
+
+step "Healthcheck boot hook"
+cat > /etc/init.d/S99z_p3d_healthcheck <<'BOOTEOF'
+#!/bin/sh
+case "$1" in
+  start)
+    ( sleep 25; /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1 ) &
+    ;;
+  stop) ;;
+  restart) "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+BOOTEOF
+chmod +x /etc/init.d/S99z_p3d_healthcheck
+pass "Automatic QUICK healthcheck enabled at boot"
+
+step "Restart Moonraker"
+if [ -x /etc/init.d/S56moonraker_service ]; then
+  set +e
+  /etc/init.d/S56moonraker_service restart >>"$LOG" 2>&1
+  RESTART_RC=$?
+  set -e
+  if [ "$RESTART_RC" -eq 0 ]; then
+    pass "Moonraker restart command accepted"
+  else
+    say "[WARN] Moonraker init-script returned rc=$RESTART_RC; API readiness is authoritative"
+  fi
+else
+  say "[WARN] Moonraker init-script missing; API readiness is authoritative"
+fi
+
+step "Wait for Moonraker API readiness"
+MOONRAKER_READY=0
+MOONRAKER_WAITED=0
+MOONRAKER_TIMEOUT=45
+while [ "$MOONRAKER_WAITED" -lt "$MOONRAKER_TIMEOUT" ]; do
+  if wget -q -T 3 -O /tmp/p3d_moonraker_ready.json 'http://127.0.0.1:7125/server/info' 2>/dev/null; then
+    MOONRAKER_READY=1
+    break
+  fi
+  sleep 2
+  MOONRAKER_WAITED=$((MOONRAKER_WAITED + 2))
+done
+
+if [ "$MOONRAKER_READY" -eq 1 ]; then
+  pass "Moonraker API ready after ${MOONRAKER_WAITED}s"
+else
+  fail "Moonraker API did not become ready within ${MOONRAKER_TIMEOUT}s"
+fi
+
+step "Fluidd provisioning"
+PROVISION="$P3D_DIR/fluidd_provision.py"
+[ -f "$PROVISION" ] || fail "$PROVISION is missing. Install the complete P3D deployment package."
+
+PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON="$(command -v python3 2>/dev/null || true)"
+fi
+[ -n "$PYTHON" ] && [ -x "$PYTHON" ] || fail "Python 3 runtime not found for Fluidd provisioning"
+
+set +e
+PROVISION_OUTPUT="$("$PYTHON" "$PROVISION" 2>&1)"
+PROVISION_RC=$?
+set -e
+[ -n "$PROVISION_OUTPUT" ] && say "$PROVISION_OUTPUT"
+
+case "$PROVISION_RC" in
+  0) pass "Fluidd provisioning completed" ;;
+  1) say "[WARN] Fluidd provisioning preserved custom user state; FULL healthcheck will report WARN" ;;
+  *) fail "Fluidd provisioning failed (rc=$PROVISION_RC)" ;;
+esac
+
+[ -x "$P3D_DIR/healthcheck.sh" ] || fail "$P3D_DIR/healthcheck.sh is missing. Copy the complete P3D deployment package before running deploy.sh."
+
+step "FULL post-deploy gate"
+set +e
+"$P3D_DIR/healthcheck.sh" --full
+rc=$?
+set -e
+
+case "$rc" in
+  0)
+    pass "FULL healthcheck passed"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: PASS"
+    say "========================================"
+    exit 0
+    ;;
+  1)
+    say "[WARN] FULL healthcheck completed with warnings"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: WARN"
+    say " Review warnings before production use."
+    say "========================================"
+    exit 1
+    ;;
+  *)
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: FAIL (healthcheck rc=$rc)"
+    say "========================================"
+    exit "$rc"
+    ;;
+esac
+ "$PRINTER_CFG" || fail "K1 Max board-fan shutdown value is not 100%"
+  if grep -q '^\[controller_fan board_fan\]CAMERA_OK=0
+rm -f /tmp/p3d_snapshot.jpg
+if wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' 2>/dev/null; then
+  SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+  [ "$SIZE" -gt 1000 ] && CAMERA_OK=1
+fi
+
+if [ "$CAMERA_OK" -eq 0 ]; then
+  [ -x /usr/bin/mjpg_streamer ] || fail "Camera snapshot unavailable and /usr/bin/mjpg_streamer missing"
+  [ -d /usr/lib/mjpg-streamer ] || fail "Camera snapshot unavailable and /usr/lib/mjpg-streamer missing"
+  cat > /etc/init.d/S99mjpg_camera <<'CAMERAEOF'
+#!/bin/sh
+PIDFILE=/var/run/main-video-4_mjpg.pid
+MJPG=/usr/bin/mjpg_streamer
+LIB=/usr/lib/mjpg-streamer
+case "$1" in
+  start)
+    pidof mjpg_streamer >/dev/null 2>&1 && exit 0
+    LD_LIBRARY_PATH="$LIB" start-stop-daemon -S -b -m -p "$PIDFILE" --exec "$MJPG" -- \
+      -i "input_memfd.so -t 0" \
+      -o "output_http.so -w /usr/share/mjpg-streamer/www/ -p 8080"
+    ;;
+  stop)
+    start-stop-daemon -K -p "$PIDFILE" 2>/dev/null || true
+    rm -f "$PIDFILE"
+    ;;
+  restart|reload)
+    "$0" stop; sleep 1; "$0" start
+    ;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CAMERAEOF
+  chmod +x /etc/init.d/S99mjpg_camera
+  /etc/init.d/S99mjpg_camera restart
+  sleep 2
+fi
+
+rm -f /tmp/p3d_snapshot.jpg
+wget -q -T 5 -O /tmp/p3d_snapshot.jpg 'http://127.0.0.1:8080/?action=snapshot' || fail "Camera snapshot test failed"
+SIZE="$(stat -c %s /tmp/p3d_snapshot.jpg 2>/dev/null || echo 0)"
+[ "$SIZE" -gt 1000 ] || fail "Camera snapshot invalid ($SIZE bytes)"
+pass "Camera snapshot OK ($SIZE bytes)"
+
+step "Stock Creality timelapse OFF"
+CREALITY_CFG="/usr/data/creality/userdata/config/user_print_refer.json"
+if [ -f "$CREALITY_CFG" ]; then
+  [ -f "$CREALITY_CFG.p3d-original" ] || cp -p "$CREALITY_CFG" "$CREALITY_CFG.p3d-original"
+  sed -i '/"delay_image":{/,/}/ s/"switch":1/"switch":0/' "$CREALITY_CFG"
+  DELAY="$(sed -n '/"delay_image":{/,/}/p' "$CREALITY_CFG" | grep -o '"switch":[01]' | head -n1 | cut -d: -f2 || true)"
+  [ "$DELAY" = "0" ] || fail "Could not confirm Creality timelapse switch=0"
+  pass "Creality stock timelapse disabled"
+else
+  fail "$CREALITY_CFG missing"
+fi
+
+step "Moonraker Timelapse ffmpeg compatibility"
+if [ -x /opt/bin/ffmpeg ]; then
+  pass "/opt/bin/ffmpeg already available"
+elif [ -x /usr/bin/ffmpeg ]; then
+  mkdir -p /opt/bin
+  ln -sf /usr/bin/ffmpeg /opt/bin/ffmpeg
+  pass "Created /opt/bin/ffmpeg -> /usr/bin/ffmpeg"
+else
+  fail "No usable ffmpeg found"
+fi
+/opt/bin/ffmpeg -version >/dev/null 2>&1 || fail "ffmpeg execution failed"
+
+step "Timelapse cleanup"
+mkdir -p /usr/data/scripts
+cat > /usr/data/scripts/timelapse_cleanup.sh <<'CLEANEOF'
+#!/bin/sh
+HIGH=80
+LOW=75
+DIR1="/usr/data/printer_data/timelapse"
+DIR2="/usr/data/creality/userdata/delay_image/video"
+usage_percent() { df -P /usr/data | awk 'NR==2 {gsub("%","",$5); print $5}'; }
+USED="$(usage_percent)"
+[ -z "$USED" ] && exit 1
+[ "$USED" -lt "$HIGH" ] && exit 0
+while [ "$USED" -gt "$LOW" ]; do
+  OLDEST="$(find "$DIR1" "$DIR2" -type f 2>/dev/null | while read FILE; do MTIME="$(stat -c %Y "$FILE" 2>/dev/null)"; [ -n "$MTIME" ] && echo "$MTIME $FILE"; done | sort -n | head -n1 | cut -d' ' -f2-)"
+  [ -n "$OLDEST" ] || exit 0
+  rm -f "$OLDEST"
+  USED="$(usage_percent)"
+done
+CLEANEOF
+chmod +x /usr/data/scripts/timelapse_cleanup.sh
+pass "Cleanup policy installed (80% -> 75%)"
+
+mkdir -p /usr/data/cron
+CRON=/usr/data/cron/root
+touch "$CRON"
+grep -q '/usr/data/scripts/timelapse_cleanup.sh' "$CRON" || echo '0 * * * * /usr/data/scripts/timelapse_cleanup.sh >> /usr/data/scripts/timelapse_cleanup.log 2>&1' >> "$CRON"
+grep -q '/usr/data/scripts/p3d-k1/healthcheck.sh --quick' "$CRON" || echo '17 3 * * * /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1' >> "$CRON"
+chmod 600 "$CRON"
+
+cat > /etc/init.d/S98timelapse_cron <<'CRONEOF'
+#!/bin/sh
+CROND=/usr/sbin/crond
+CRONDIR=/usr/data/cron
+LOG=/usr/data/scripts/crond.log
+case "$1" in
+  start)
+    pidof crond >/dev/null 2>&1 && exit 0
+    "$CROND" -b -c "$CRONDIR" -L "$LOG"
+    ;;
+  stop) killall crond 2>/dev/null || true;;
+  restart) "$0" stop; sleep 1; "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+CRONEOF
+chmod +x /etc/init.d/S98timelapse_cron
+/etc/init.d/S98timelapse_cron restart
+pass "Cron installed"
+
+step "Healthcheck boot hook"
+cat > /etc/init.d/S99z_p3d_healthcheck <<'BOOTEOF'
+#!/bin/sh
+case "$1" in
+  start)
+    ( sleep 25; /usr/data/scripts/p3d-k1/healthcheck.sh --quick >/dev/null 2>&1 ) &
+    ;;
+  stop) ;;
+  restart) "$0" start;;
+  *) echo "Usage: $0 {start|stop|restart}"; exit 1;;
+esac
+BOOTEOF
+chmod +x /etc/init.d/S99z_p3d_healthcheck
+pass "Automatic QUICK healthcheck enabled at boot"
+
+step "Restart Moonraker"
+if [ -x /etc/init.d/S56moonraker_service ]; then
+  set +e
+  /etc/init.d/S56moonraker_service restart >>"$LOG" 2>&1
+  RESTART_RC=$?
+  set -e
+  if [ "$RESTART_RC" -eq 0 ]; then
+    pass "Moonraker restart command accepted"
+  else
+    say "[WARN] Moonraker init-script returned rc=$RESTART_RC; API readiness is authoritative"
+  fi
+else
+  say "[WARN] Moonraker init-script missing; API readiness is authoritative"
+fi
+
+step "Wait for Moonraker API readiness"
+MOONRAKER_READY=0
+MOONRAKER_WAITED=0
+MOONRAKER_TIMEOUT=45
+while [ "$MOONRAKER_WAITED" -lt "$MOONRAKER_TIMEOUT" ]; do
+  if wget -q -T 3 -O /tmp/p3d_moonraker_ready.json 'http://127.0.0.1:7125/server/info' 2>/dev/null; then
+    MOONRAKER_READY=1
+    break
+  fi
+  sleep 2
+  MOONRAKER_WAITED=$((MOONRAKER_WAITED + 2))
+done
+
+if [ "$MOONRAKER_READY" -eq 1 ]; then
+  pass "Moonraker API ready after ${MOONRAKER_WAITED}s"
+else
+  fail "Moonraker API did not become ready within ${MOONRAKER_TIMEOUT}s"
+fi
+
+step "Fluidd provisioning"
+PROVISION="$P3D_DIR/fluidd_provision.py"
+[ -f "$PROVISION" ] || fail "$PROVISION is missing. Install the complete P3D deployment package."
+
+PYTHON="/usr/data/moonraker/moonraker-env/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON="$(command -v python3 2>/dev/null || true)"
+fi
+[ -n "$PYTHON" ] && [ -x "$PYTHON" ] || fail "Python 3 runtime not found for Fluidd provisioning"
+
+set +e
+PROVISION_OUTPUT="$("$PYTHON" "$PROVISION" 2>&1)"
+PROVISION_RC=$?
+set -e
+[ -n "$PROVISION_OUTPUT" ] && say "$PROVISION_OUTPUT"
+
+case "$PROVISION_RC" in
+  0) pass "Fluidd provisioning completed" ;;
+  1) say "[WARN] Fluidd provisioning preserved custom user state; FULL healthcheck will report WARN" ;;
+  *) fail "Fluidd provisioning failed (rc=$PROVISION_RC)" ;;
+esac
+
+[ -x "$P3D_DIR/healthcheck.sh" ] || fail "$P3D_DIR/healthcheck.sh is missing. Copy the complete P3D deployment package before running deploy.sh."
+
+step "FULL post-deploy gate"
+set +e
+"$P3D_DIR/healthcheck.sh" --full
+rc=$?
+set -e
+
+case "$rc" in
+  0)
+    pass "FULL healthcheck passed"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: PASS"
+    say "========================================"
+    exit 0
+    ;;
+  1)
+    say "[WARN] FULL healthcheck completed with warnings"
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: WARN"
+    say " Review warnings before production use."
+    say "========================================"
+    exit 1
+    ;;
+  *)
+    say ""
+    say "========================================"
+    say " P3D K1 DEPLOYMENT: FAIL (healthcheck rc=$rc)"
+    say "========================================"
+    exit "$rc"
+    ;;
+esac
+ "$PRINTER_CFG"; then
+    fail "Legacy controller_fan board_fan still present"
+  fi
+  pass "K1 Max board fan CF0502 compatibility patch installed"
+else
+  pass "K1 Max board fan patch not applicable to this model"
+fi
+
 step "P3D camera compatibility"
 CAMERA_OK=0
 rm -f /tmp/p3d_snapshot.jpg

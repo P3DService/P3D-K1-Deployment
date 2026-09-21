@@ -110,7 +110,7 @@ Recommended workflow:
 
 ```bash
 wget -q -O /tmp/p3d-k1-install.sh \
-  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.0/install.sh
+  https://raw.githubusercontent.com/P3DService/P3D-K1-Deployment/v0.6.1/install.sh
 
 cat /tmp/p3d-k1-install.sh
 sh /tmp/p3d-k1-install.sh
@@ -129,6 +129,14 @@ P3D_K1_FLUIDD_FORCE=1 /usr/data/scripts/p3d-k1/deploy.sh
 ```
 
 A backup is created before provisioning.
+
+## K1 Max CF0502 / Mainboard fan exception
+
+If a K1 Max reports `CF0502`, `Mainboard fan exception` or `Motherboard fan running abnormal`, use the dedicated field-validated guide:
+
+- [K1 Max CF0502 / motherboard fan exception](K1_MAX_CF0502.md)
+
+Do not suppress the fault blindly. The guide first distinguishes the validated software-control case from a real fan/tach/wiring failure.
 
 ## TMC2209 overtemperature during cold calibration
 

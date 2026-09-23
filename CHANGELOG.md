@@ -14,7 +14,7 @@
 - `fan1 -> PC0` подтверждён на K1 Max.
 - `M107 P1` останавливает задний вентилятор.
 - После патча `M106 P1 S128` запускает вентилятор из полного останова и он продолжает вращаться.
-- Production-print observation: in progress.
+- Production print: chamber temperature reached the trigger point, rear fan started automatically and operated normally — PASS.
 
 ## 0.6.1 — 2026-09-22
 

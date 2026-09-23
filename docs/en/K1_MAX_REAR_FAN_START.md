@@ -88,7 +88,7 @@ Validated on K1 Max on 2026-09-23:
 - `M107 P1`: fan stops
 - patched `M106 P1 S128`: fan starts from rest and keeps rotating
 - printer screen shows the requested fan percentage
-- production-print observation is still being monitored
+- production print: chamber temperature reached the control threshold, rear fan started automatically and operated normally — PASS
 
 ## Safety boundary
 

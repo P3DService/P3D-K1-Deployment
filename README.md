@@ -107,6 +107,7 @@ Existing database-managed camera name and UID are preserved during reconcile. Re
 If a **K1 Max** reports `CF0502`, `Mainboard fan exception` or `Motherboard fan running abnormal`, use the dedicated field-validated guide:
 
 - [K1 Max CF0502 / motherboard fan exception](docs/en/K1_MAX_CF0502.md)
+- [K1 Max rear/chamber fan does not start at reduced speed](docs/en/K1_MAX_REAR_FAN_START.md)
 
 The v0.6.1 baseline keeps the motherboard fan above 0 RPM and validates the fix through healthcheck.
 

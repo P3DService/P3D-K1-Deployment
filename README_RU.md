@@ -107,6 +107,7 @@ aspect_ratio: 4:3
 Если **K1 Max** показывает `CF0502`, `Mainboard fan exception`, `Motherboard fan running abnormal` или ошибку вентилятора материнской платы:
 
 - [K1 Max: CF0502 / ошибка вентилятора материнской платы](docs/ru/K1_MAX_CF0502.md)
+- [K1 Max: задний вентилятор не стартует на пониженной скорости](docs/ru/K1_MAX_REAR_FAN_START.md)
 
 В baseline v0.6.1 вентилятор платы не переходит в 0 RPM, а healthcheck проверяет правильность конфигурации.
 

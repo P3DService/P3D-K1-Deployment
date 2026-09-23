@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Исправлено
+
+- K1 Max: добавлен 500 мс kick-start для заднего/chamber fan (`fan1 / PC0`) при запуске из 0 на пониженном PWM.
+- Фикс минимальный: штатные `M106 P1` / `M107 P1`, chamber temperature logic и `printer.cfg` не переделываются.
+- Healthcheck проверяет наличие rear-fan kick-start baseline.
+- Добавлена RU/EN документация для кейса «интерфейс показывает вентилятор включённым, но физически он не вращается».
+
+### Field validation
+
+- `fan1 -> PC0` подтверждён на K1 Max.
+- `M107 P1` останавливает задний вентилятор.
+- После патча `M106 P1 S128` запускает вентилятор из полного останова и он продолжает вращаться.
+- Production print: chamber temperature reached the trigger point, rear fan started automatically and operated normally — PASS.
+
 ## 0.6.1 — 2026-09-22
 
 ### Исправлено

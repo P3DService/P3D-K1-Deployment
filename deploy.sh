@@ -203,6 +203,63 @@ PYEOF
   fi
   pass "K1 Max board fan CF0502 compatibility patch installed"
 
+  GCODE_MACRO_CFG="/usr/data/printer_data/config/gcode_macro.cfg"
+  [ -f "$GCODE_MACRO_CFG" ] || fail "$GCODE_MACRO_CFG missing"
+
+  "$BOARD_FAN_PY" - "$GCODE_MACRO_CFG" <<'PYEOF'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+
+marker = "# P3D: K1 Max rear/chamber fan (fan1 / PC0) can fail to start"
+
+if marker not in text:
+    old = """  {% if value >= 255 %}
+    {% set value = 255 %}
+  {% endif %}
+  SET_PIN PIN=fan{fan} VALUE={value}
+
+[gcode_macro M107]
+"""
+
+    new = """  {% if value >= 255 %}
+    {% set value = 255 %}
+  {% endif %}
+
+  # P3D: K1 Max rear/chamber fan (fan1 / PC0) can fail to start
+  # from rest at reduced PWM. Give it a short 100% kick before
+  # settling to the requested speed.
+  {% if fan == 1 and value > 0 and value < 255
+        and printer['output_pin fan1'].value|float == 0 %}
+    SET_PIN PIN=fan1 VALUE=255
+    G4 P500
+  {% endif %}
+
+  SET_PIN PIN=fan{fan} VALUE={value}
+
+[gcode_macro M107]
+"""
+
+    if old not in text:
+        raise SystemExit("expected stock M106 tail not found; refusing unknown macro layout")
+
+    backup = path.with_name("gcode_macro.cfg.p3d-pre-fan1-kickstart")
+    if not backup.exists():
+        backup.write_text(text)
+
+    path.write_text(text.replace(old, new, 1))
+PYEOF
+
+  grep -q '^  # P3D: K1 Max rear/chamber fan (fan1 / PC0) can fail to start$' "$GCODE_MACRO_CFG" \
+    || fail "K1 Max rear-fan kick-start marker missing"
+  grep -q "printer\['output_pin fan1'\].value|float == 0" "$GCODE_MACRO_CFG" \
+    || fail "K1 Max rear-fan zero-state guard missing"
+  grep -q '^    G4 P500$' "$GCODE_MACRO_CFG" \
+    || fail "K1 Max rear-fan 500 ms kick missing"
+  pass "K1 Max rear/chamber fan reduced-PWM kick-start installed"
+
   if restart_klipper >>"$LOG" 2>&1; then
     pass "Klipper restarted to apply K1 Max board-fan baseline"
   else

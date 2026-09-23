@@ -134,6 +134,16 @@ if echo "$MODEL_RAW" | grep -qi 'K1[[:space:]_-]*Max'; then
   else
     pass "K1 Max PB2 removed from heater_fans"
   fi
+
+  GCODE_MACRO_CFG="/usr/data/printer_data/config/gcode_macro.cfg"
+  if [ -f "$GCODE_MACRO_CFG" ] \
+     && grep -q '^  # P3D: K1 Max rear/chamber fan (fan1 / PC0) can fail to start$' "$GCODE_MACRO_CFG" \
+     && grep -q "printer\['output_pin fan1'\].value|float == 0" "$GCODE_MACRO_CFG" \
+     && grep -q '^    G4 P500$' "$GCODE_MACRO_CFG"; then
+    pass "K1 Max rear/chamber fan kick-start baseline present"
+  else
+    fail "K1 Max rear/chamber fan kick-start baseline missing or incomplete"
+  fi
 fi
 
 LOGFILE="/usr/data/printer_data/logs/moonraker.log"

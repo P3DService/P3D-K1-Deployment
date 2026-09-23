@@ -130,6 +130,14 @@ P3D_K1_FLUIDD_FORCE=1 /usr/data/scripts/p3d-k1/deploy.sh
 
 A backup is created before provisioning.
 
+## K1 Max rear/chamber fan shown on but not physically spinning
+
+If the K1 Max rear/chamber fan is shown as enabled but is physically stopped, and a manual `0% -> 100%` change starts it immediately, see:
+
+- [K1 Max rear/chamber fan does not start at reduced speed](K1_MAX_REAR_FAN_START.md)
+
+The P3D workaround adds a 500 ms full-power kick only when `fan1` starts from 0 at reduced PWM.
+
 ## K1 Max CF0502 / Mainboard fan exception
 
 If a K1 Max reports `CF0502`, `Mainboard fan exception` or `Motherboard fan running abnormal`, use the dedicated field-validated guide:

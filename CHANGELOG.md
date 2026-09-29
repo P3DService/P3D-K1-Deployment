@@ -8,6 +8,10 @@
 - Фикс минимальный: штатные `M106 P1` / `M107 P1`, chamber temperature logic и `printer.cfg` не переделываются.
 - Healthcheck проверяет наличие rear-fan kick-start baseline.
 - Добавлена RU/EN документация для кейса «интерфейс показывает вентилятор включённым, но физически он не вращается».
+- K1 Max: задокументирован PRTouch edge-case at X295 Y5, где сопло может продолжать давить стол и выдавать ложный ~-3.1 мм probe при исправных load-cell каналах.
+- Добавлен field-validated workaround: `mesh_min: 15,15`, `mesh_max: 285,285` для исключения крайних 10 мм зоны probing.
+- Зафиксирована безопасная диагностика четырёх pressure-каналов через `READ_PRES` и карта углов CH0..CH3.
+- После повторной Z-синхронизации и горячего Bed Mesh при 80 °C получен raw range ~0.624 мм и residual front-to-back tilt ~0.16 мм.
 
 ### Field validation
 

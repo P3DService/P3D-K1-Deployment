@@ -162,6 +162,8 @@ See the field-validated K1 Max guide:
 
 - [K1 Max Bed Mesh tilt, repeated probing and Z synchronization](BED_MESH_Z_SYNC.md)
 
+If the nozzle visibly pushes the bed down at the front-right corner and the `X295 Y5` point falls to roughly `-3 mm`, see the 2026-09-29 addendum in that guide: `READ_PRES` channel diagnostics and the validated `mesh_min: 15,15 / mesh_max: 285,285` workaround.
+
 ## Collect diagnostics
 
 ```bash

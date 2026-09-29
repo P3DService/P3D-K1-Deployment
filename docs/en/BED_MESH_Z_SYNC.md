@@ -182,3 +182,105 @@ For a 300×300 mm consumer printer, a smooth hot mesh around **0.5–0.8 mm tota
 Do not keep adjusting synchronized Z screws just to remove a smooth central bowl. Once front-to-back and left-to-right tilt are small, further Z synchronization cannot flatten the plate itself and can reintroduce tilt.
 
 Validate with a large first-layer print before making additional mechanical changes.
+
+
+## 2026-09-29 addendum: PRTouch dives into the bed at X295 Y5
+
+The same K1 Max later developed a separate edge-case during `BED_MESH_CALIBRATE`: at the front-right corner the nozzle visibly pushed the bed down, while the console reported a single point near **-3.1 mm** next to otherwise normal values.
+
+Representative values:
+
+```text
+(237, 5)   +0.137
+(295, 5)   -3.106   <- anomaly
+(295, 63)  +0.293
+```
+
+No mechanical bed play or crack was found during manual inspection.
+
+### Verify the four pressure channels
+
+PRTouch v2 exposes four pressure channels, `pres0..pres3`. The command:
+
+```gcode
+READ_PRES
+```
+
+reads them without moving the axes.
+
+Manual corner loading produced this mapping:
+
+| Bed corner | Primary channel |
+| --- | --- |
+| Front-left | CH0 |
+| Front-right | CH1 |
+| Rear-left | CH2 |
+| Rear-right | CH3 |
+
+The front-right `CH1` sensor was healthy: manual loading changed its reading by roughly **746k**, and after release it returned to baseline within about **0.2%**. That strongly argues against a dead load cell or static wiring fault.
+
+### What klippy.log showed
+
+At `X295 Y5`, PRTouch did not produce one random bad sample. It repeatedly returned approximately:
+
+```text
+-2.712
+-3.063
+-3.113
+-3.106
+-3.153
+```
+
+The algorithm initially selected the expected front-right channel, `best_ch=1`, then switched to `best_ch=2` during retries while the result remained near -3 mm.
+
+The very next point, `X295 Y63`, measured normally at about **+0.293 mm**.
+
+That pattern points to a dynamic PRTouch edge-case at the physical probing boundary rather than a failed sensor.
+
+### Practical workaround: keep 10 mm away from the extreme edge
+
+Original mesh:
+
+```ini
+[bed_mesh]
+mesh_min: 5,5
+mesh_max: 295,295
+probe_count: 6,6
+```
+
+was changed to:
+
+```ini
+[bed_mesh]
+mesh_min: 15,15
+mesh_max: 285,285
+probe_count: 6,6
+```
+
+The resulting 6x6 coordinates are:
+
+```text
+15, 69, 123, 177, 231, 285
+```
+
+After this change, the -3 mm outlier disappeared completely and the front-right region probed without forcing the bed downward.
+
+### Re-synchronize Z after removing the probing edge-case
+
+With the false edge point removed, the real bed geometry became visible: the front-to-back tilt was about **1.5 mm**.
+
+On this printer, the previously field-tested lower-stop click method was used again. After **4 controlled single clicks**, average front-to-back tilt dropped to about **0.1-0.2 mm**.
+
+Do not copy the number "4 clicks" to another printer blindly; this is a field result from one specific K1 Max.
+
+### Final 80 °C result
+
+After thermal stabilization at **80 °C** and re-running Bed Mesh with the `15..285` bounds:
+
+- minimum raw probe: **0.1278 mm**
+- maximum raw probe: **0.7516 mm**
+- raw range: **~0.624 mm**
+- average residual front-to-back tilt: **~0.16 mm**
+- no further front-right PRTouch dive occurred
+
+The combined workaround was therefore: **avoid the outermost 10 mm of the probing region, then re-synchronize Z based on the corrected mesh**.

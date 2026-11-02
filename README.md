@@ -2,6 +2,9 @@
 
 [**English**](README.md) | [Русский](README_RU.md)
 
+> [!IMPORTANT]
+> **PROJECT CLOSED — UNSUPPORTED.** This project is no longer maintained or used by P3D Service. The scripts and documentation are preserved for historical reference only. **Do not use them for new installations.** No fixes, compatibility validation, issue support or security updates will be provided. Existing installations remain entirely at their owners' risk.
+
 Automated deployment, configuration, Fluidd provisioning and health validation for rooted **Creality K1C** and **Creality K1 Max** printers.
 
 P3D K1 Deployment turns a rooted K1-series printer into a repeatable, validated baseline with the approved Helper Script stack, working camera, Moonraker Timelapse, cleanup automation, organized Fluidd macros and QUICK/FULL health checks.
@@ -11,7 +14,7 @@ P3D K1 Deployment turns a rooted K1-series printer into a repeatable, validated 
 > [!WARNING]
 > **Use at your own risk.** Rooting, firmware/configuration changes, forced motion, disassembly and mechanical/electrical adjustments can damage equipment, void warranty or cause injury. P3D Service and contributors are not responsible for consequences to the maximum extent permitted by applicable law. Read the full [Safety Disclaimer](DISCLAIMER.md).
 
-## Current stable baseline
+## Last historical stable baseline
 
 **v0.6.1**
 
@@ -231,13 +234,7 @@ tail -100 /usr/data/scripts/p3d-k1/deploy.log
 
 ## Community
 
-Use GitHub Issues for:
-
-- bug reports;
-- compatibility reports;
-- feature requests.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) or [CONTRIBUTING_RU.md](CONTRIBUTING_RU.md).
+The project is closed. GitHub Issues and contributions are no longer monitored or accepted. [CONTRIBUTING.md](CONTRIBUTING.md) and [CONTRIBUTING_RU.md](CONTRIBUTING_RU.md) remain only as historical documents.
 
 ## External monitoring
 
